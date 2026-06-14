@@ -176,7 +176,10 @@ function Dashboard(): React.ReactElement {
                   <p className="font-semibold text-slate-900 text-xl">Administration</p>
                 </div>
                 <div className="flex-1" />
-              
+                <button type="button" className={accentButtonClass}>
+                  <Plus size={18} />
+                  Ajouter un étudiant
+                </button>
               </div>
 
               <div className="flex items-center gap-2 text-slate-600 text-sm">

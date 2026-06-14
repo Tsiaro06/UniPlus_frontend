@@ -322,11 +322,7 @@ function StagesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Stage | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { etudiant, annee, noteSoutenance, moyPratique, dateSoutenance, ...data } = payload;
-      // POST expects: inscriptionId, anneeScolaireId, enseignantId, entreprise, sujet, noteEncadrant
-      return stagesApi.create?.(data) ?? Promise.resolve({ ...data, id: Date.now() });
-    },
+    mutationFn: (payload: FormData) => stagesApi.create?.(payload) ?? Promise.resolve({ ...payload, id: Date.now() }),
     onSuccess: () => {
       toast.success("Stage ajouté avec succès !");
       qc.invalidateQueries({ queryKey: ["stages"] });
@@ -337,11 +333,8 @@ function StagesPage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Stage["id"] }) => {
-      const { etudiant, annee, enseignant, noteSoutenance, moyPratique, dateSoutenance, ...data } = payload;
-      // PUT only accepts: entreprise, sujet, noteEncadrant
-      return stagesApi.update?.(id, data) ?? Promise.resolve({ id, ...data });
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Stage["id"] }) =>
+      stagesApi.update?.(id, payload) ?? Promise.resolve({ id, ...payload }),
     onSuccess: () => {
       toast.success("Stage modifié avec succès !");
       qc.invalidateQueries({ queryKey: ["stages"] });

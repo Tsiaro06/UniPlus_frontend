@@ -31,19 +31,10 @@ export function TD({ children, className }: { children: ReactNode; className?: s
   return <td className={cn("px-4 py-3 text-foreground", className)}>{children}</td>;
 }
 
-export function Avatar({ name, className }: { name: unknown; className?: string }) {
-  const displayName =
-    typeof name === "string"
-      ? name
-      : name && typeof name === "object"
-        ? [(name as { prenom?: string }).prenom, (name as { nom?: string }).nom]
-            .filter(Boolean)
-            .join(" ") ||
-          String((name as { nom?: string }).nom ?? (name as { label?: string }).label ?? "?")
-        : String(name ?? "?");
-  const initials = displayName.split(" ").map((p) => p[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+export function Avatar({ name, className }: { name: string; className?: string }) {
+  const initials = name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const colors = ["bg-blue-500","bg-purple-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-indigo-500","bg-teal-500"];
-  const c = colors[(displayName.charCodeAt(0) || 0) % colors.length];
+  const c = colors[name.charCodeAt(0) % colors.length];
   return (
     <div className={cn("flex justify-center items-center rounded-full w-9 h-9 font-semibold text-white text-xs", c, className)}>
       {initials}

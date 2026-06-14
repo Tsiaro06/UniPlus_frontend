@@ -1,37 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Trash2, X, Check, AlertTriangle, Loader } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
 import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data-table";
-import { affectationsApi, matieresApi, enseignantsApi, anneesApi, groupesApi } from "@/lib/api/endpoints";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import type { AnneeScolaireSemestre } from "@/lib/lmd";
+import { affectations as mock, annees, groupes } from "@/lib/mock-data";
+import { affectationsApi } from "@/lib/api/endpoints";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface AffectationResponse {
-  id: number;
-  matiereId: number;
-  enseignantId: number;
-  groupeId: number;
-  anneeScolaireSemestreId: number;
-  matiere?: { id: number; code: string; intitule: string };
-  enseignant?: { id: number; nom: string; prenom: string };
-  groupe?: { id: number; nom: string };
-  anneeScolaireSemestre?: AnneeScolaireSemestre & {
-    anneeScolaire?: { id: number; label: string };
-  };
-}
-
 interface Affectation {
-  id: number;
-  matiereId: number;
-  enseignantId: number;
-  groupeId: number;
-  anneeScolaireSemestreId: number;
+  id: number | string;
   enseignant: string;
   matiere: string;
   groupe: string;
@@ -39,12 +21,7 @@ interface Affectation {
   annee: string;
 }
 
-type FormData = {
-  matiereId: number;
-  enseignantId: number;
-  groupeId: number;
-  anneeScolaireSemestreId: number;
-};
+type FormData = Omit<Affectation, "id">;
 
 // ─── CSS Animations (named classes — no inline styles) ────────────────────────
 
@@ -109,6 +86,8 @@ function Field({
   );
 }
 
+const SEMESTRES = ["S1", "S2", "S3", "S4", "S5", "S6"];
+
 // ─── Form Modal (Add / Edit) ─────────────────────────────────────────────────
 
 interface FormModalProps {
@@ -118,10 +97,6 @@ interface FormModalProps {
   onSave: (data: FormData & { id?: Affectation["id"] }) => void;
   onCancel: () => void;
   isSaving: boolean;
-  matieres: any[];
-  enseignants: any[];
-  groupes: any[];
-  calendarSemestres: AnneeScolaireSemestre[];
 }
 
 function FormModal({
@@ -131,25 +106,23 @@ function FormModal({
   onSave,
   onCancel,
   isSaving,
-  matieres,
-  enseignants,
-  groupes,
-  calendarSemestres,
 }: FormModalProps) {
   const [form, setForm] = useState<FormData>({
-    matiereId: 0,
-    enseignantId: 0,
-    groupeId: 0,
-    anneeScolaireSemestreId: 0,
+    enseignant: "",
+    matiere: "",
+    groupe: groupes[0]?.nom ?? "",
+    semestre: "S1",
+    annee: annees[0]?.label ?? "",
   });
 
   useEffect(() => {
     if (isOpen) {
       setForm({
-        matiereId: initial?.matiereId ?? 0,
-        enseignantId: initial?.enseignantId ?? 0,
-        groupeId: initial?.groupeId ?? 0,
-        anneeScolaireSemestreId: initial?.anneeScolaireSemestreId ?? 0,
+        enseignant: initial?.enseignant ?? "",
+        matiere: initial?.matiere ?? "",
+        groupe: initial?.groupe ?? groupes[0]?.nom ?? "",
+        semestre: initial?.semestre ?? "S1",
+        annee: initial?.annee ?? annees[0]?.label ?? "",
       });
     }
   }, [isOpen, initial]);
@@ -157,11 +130,7 @@ function FormModal({
   if (!isOpen) return null;
 
   const canSubmit =
-    form.matiereId > 0 &&
-    form.enseignantId > 0 &&
-    form.groupeId > 0 &&
-    form.anneeScolaireSemestreId > 0 &&
-    !isSaving;
+    form.enseignant.trim() !== "" && form.matiere.trim() !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -207,74 +176,77 @@ function FormModal({
 
           {/* Body */}
           <div className="space-y-4 px-6 py-5">
-            <Field label="Matière *" htmlFor="aff-matiere">
-              <select
-                id="aff-matiere"
-                value={form.matiereId}
-                onChange={(e) => setForm((f) => ({ ...f, matiereId: parseInt(e.target.value) || 0 }))}
+            <Field label="Enseignant *" htmlFor="aff-enseignant">
+              <input
+                id="aff-enseignant"
+                type="text"
+                value={form.enseignant}
+                onChange={(e) => setForm((f) => ({ ...f, enseignant: e.target.value }))}
+                placeholder="Ex : Dr. Rakoto"
                 className={inputCls}
-              >
-                <option value="0">-- Sélectionner une matière --</option>
-                {matieres.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.code} - {m.intitule}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
 
-            <Field label="Enseignant *" htmlFor="aff-enseignant">
-              <select
-                id="aff-enseignant"
-                value={form.enseignantId}
-                onChange={(e) => setForm((f) => ({ ...f, enseignantId: parseInt(e.target.value) || 0 }))}
+            <Field label="Matière *" htmlFor="aff-matiere">
+              <input
+                id="aff-matiere"
+                type="text"
+                value={form.matiere}
+                onChange={(e) => setForm((f) => ({ ...f, matiere: e.target.value }))}
+                placeholder="Ex : Algorithmique"
                 className={inputCls}
-              >
-                <option value="0">-- Sélectionner un enseignant --</option>
-                {enseignants.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.prenom} {e.nom}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
 
             <div className="gap-4 grid grid-cols-2">
               <Field label="Groupe" htmlFor="aff-groupe">
                 <select
                   id="aff-groupe"
-                  value={form.groupeId}
-                  onChange={(e) => setForm((f) => ({ ...f, groupeId: parseInt(e.target.value) || 0 }))}
+                  value={form.groupe}
+                  onChange={(e) => setForm((f) => ({ ...f, groupe: e.target.value }))}
                   title="Groupe"
                   className={inputCls}
                 >
-                  <option value="0">-- Sélectionner --</option>
                   {groupes.map((g) => (
-                    <option key={g.id} value={g.id}>
+                    <option key={g.id} value={g.nom}>
                       {g.nom}
                     </option>
                   ))}
                 </select>
               </Field>
 
-              <Field label="Semestre calendaire *" htmlFor="aff-semestre">
+              <Field label="Semestre" htmlFor="aff-semestre">
                 <select
                   id="aff-semestre"
-                  value={form.anneeScolaireSemestreId}
-                  onChange={(e) => setForm((f) => ({ ...f, anneeScolaireSemestreId: parseInt(e.target.value) || 0 }))}
-                  title="Semestre calendaire (anneeScolaireSemestreId)"
+                  value={form.semestre}
+                  onChange={(e) => setForm((f) => ({ ...f, semestre: e.target.value }))}
+                  title="Semestre"
                   className={inputCls}
                 >
-                  <option value="0">-- Sélectionner --</option>
-                  {calendarSemestres.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.semestre?.code ?? `S${s.semestre?.numero}`}
-                      {s.anneeScolaireId ? ` — année #${s.anneeScolaireId}` : ""}
+                  {SEMESTRES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
                     </option>
                   ))}
                 </select>
               </Field>
             </div>
+
+            <Field label="Année académique" htmlFor="aff-annee">
+              <select
+                id="aff-annee"
+                value={form.annee}
+                onChange={(e) => setForm((f) => ({ ...f, annee: e.target.value }))}
+                title="Année académique"
+                className={inputCls}
+              >
+                {annees.map((a) => (
+                  <option key={a.id} value={a.label}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
 
           {/* Footer */}
@@ -314,10 +286,9 @@ interface DeleteDialogProps {
   target: Affectation | null;
   onConfirm: () => void;
   onCancel: () => void;
-  isDeleting: boolean;
 }
 
-function DeleteDialog({ isOpen, target, onConfirm, onCancel, isDeleting }: DeleteDialogProps) {
+function DeleteDialog({ isOpen, target, onConfirm, onCancel }: DeleteDialogProps) {
   if (!isOpen || !target) return null;
 
   return (
@@ -372,14 +343,9 @@ function DeleteDialog({ isOpen, target, onConfirm, onCancel, isDeleting }: Delet
             </button>
             <button
               onClick={onConfirm}
-              disabled={isDeleting}
-              className="flex flex-1 justify-center items-center gap-2 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-40 px-4 py-2.5 rounded-xl font-semibold text-white text-sm transition-colors disabled:cursor-not-allowed"
+              className="flex flex-1 justify-center items-center gap-2 bg-red-600 hover:bg-red-700 active:bg-red-800 px-4 py-2.5 rounded-xl font-semibold text-white text-sm transition-colors"
             >
-              {isDeleting ? (
-                <Loader className="w-4 h-4 anim-spin" aria-hidden="true" />
-              ) : (
-                <Trash2 className="w-4 h-4" aria-hidden="true" />
-              )}
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
               Supprimer
             </button>
           </div>
@@ -399,78 +365,9 @@ export const Route = createFileRoute("/_app/affectations")({
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 function AffectationsPage() {
-  // ── Fetch data from API ──────────────────────────────────────────────────────
-  const { data: affectationsData, refetch: refetchAffectations, error: affectError, isLoading: affectLoading } = useQuery({
-    queryKey: ["affectations"],
-    queryFn: async () => {
-      const res = await affectationsApi.list();
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
-
-  const { data: matieres = [] } = useQuery({
-    queryKey: ["matieres"],
-    queryFn: async () => {
-      const res = await matieresApi.list();
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
-
-  const { data: enseignants = [] } = useQuery({
-    queryKey: ["enseignants"],
-    queryFn: async () => {
-      const res = await enseignantsApi.list();
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
-
-  const { data: groupes = [] } = useQuery({
-    queryKey: ["groupes"],
-    queryFn: async () => {
-      const res = await groupesApi.list({ limit: 1000 }) as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
-
-  const { data: annees = [] } = useQuery({
-    queryKey: ["annees-scolaires"],
-    queryFn: async () => {
-      const res = await anneesApi.list({ limit: 1000 }) as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
-
-  const activeAnneeId = (annees as any[]).find((a) => a.actif)?.id ?? (annees as any[])[0]?.id;
-
-  const { data: calendarSemestres = [] } = useQuery({
-    queryKey: ["annee-semestres-all", activeAnneeId],
-    queryFn: async () => {
-      if (!activeAnneeId) return [];
-      const res = await anneesApi.listSemestres(activeAnneeId) as any;
-      const rows = (res?.data ?? res ?? []) as AnneeScolaireSemestre[];
-      return rows.map((r) => ({
-        ...r,
-        anneeScolaire: (annees as any[]).find((a) => a.id === r.anneeScolaireId),
-      }));
-    },
-    enabled: !!activeAnneeId,
-  });
-
-  const items: Affectation[] = (affectationsData ?? []).map((a: AffectationResponse) => {
-    const cal = a.anneeScolaireSemestre;
-    return {
-      id: a.id,
-      matiereId: a.matiereId,
-      enseignantId: a.enseignantId,
-      groupeId: a.groupeId,
-      anneeScolaireSemestreId: a.anneeScolaireSemestreId,
-      enseignant: a.enseignant ? `${a.enseignant.prenom} ${a.enseignant.nom}` : `Enseignant #${a.enseignantId}`,
-      matiere: a.matiere ? `${a.matiere.code} - ${a.matiere.intitule}` : `Matière #${a.matiereId}`,
-      groupe: a.groupe?.nom ?? `Groupe #${a.groupeId}`,
-      semestre: cal?.semestre ? `${cal.semestre.code ?? `S${cal.semestre.numero}`}` : `#${a.anneeScolaireSemestreId}`,
-      annee: cal?.anneeScolaire?.label ?? (cal ? `Année #${cal.anneeScolaireId}` : "—"),
-    };
-  });
+  // FIX: affectationsApi only exposes { create }; list/update/remove are managed
+  //      locally with useState seeded from mock data.
+  const [items, setItems] = useState<Affectation[]>(mock as Affectation[]);
 
   // ── Filter state ─────────────────────────────────────────────────────────
   const [filterAnnee, setFilterAnnee] = useState("");
@@ -479,45 +376,67 @@ function AffectationsPage() {
 
   // ── Modal state ──────────────────────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"add" | "edit">("add");
+  const [formInitial, setFormInitial] = useState<Partial<Affectation> | undefined>();
 
   // ── Delete state ─────────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<Affectation | null>(null);
 
-  // ── Add mutation ────────────────────────────────────────────────────────
+  // ── Add via API (only available endpoint) ────────────────────────────────
   const addMutation = useMutation({
     mutationFn: (payload: FormData) => affectationsApi.create(payload),
-    onSuccess: () => {
+    onSuccess: (created: any) => {
+      // Append the returned item (or a local surrogate if API returns nothing)
+      const newItem: Affectation = {
+        id: created?.id ?? Date.now(),
+        enseignant: created?.enseignant ?? "",
+        matiere: created?.matiere ?? "",
+        groupe: created?.groupe ?? "",
+        semestre: created?.semestre ?? "",
+        annee: created?.annee ?? "",
+      };
+      setItems((prev) => [...prev, newItem]);
       toast.success("Affectation ajoutée avec succès !");
-      refetchAffectations();
       setFormOpen(false);
     },
     onError: (e: any) => toast.error(e?.message ?? "Erreur lors de l'ajout"),
   });
 
-  // ── Update mutation ─────────────────────────────────────────────────────
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => affectationsApi.remove(id),
-    onSuccess: () => {
-      toast.success("Affectation supprimée avec succès !");
-      refetchAffectations();
-      setDeleteTarget(null);
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur lors de la suppression"),
-  });
-
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────
   const openAdd = () => {
+    setFormMode("add");
+    setFormInitial(undefined);
     setFormOpen(true);
   };
 
-  const handleSave = (data: FormData & { id?: number }) => {
-    const { id: _ignored, ...payload } = data as any;
-    addMutation.mutate(payload);
+  const openEdit = (a: Affectation) => {
+    setFormMode("edit");
+    setFormInitial(a);
+    setFormOpen(true);
+  };
+
+  const handleSave = (data: FormData & { id?: Affectation["id"] }) => {
+    if (formMode === "add") {
+      const { id: _ignored, ...payload } = data as any;
+      addMutation.mutate(payload);
+    } else if (data.id !== undefined) {
+      // FIX: no update endpoint — update local state directly
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === data.id ? ({ ...item, ...data } as Affectation) : item
+        )
+      );
+      toast.success("Affectation modifiée avec succès !");
+      setFormOpen(false);
+    }
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    deleteMutation.mutate(deleteTarget.id);
+    // FIX: no remove endpoint — remove from local state directly
+    setItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+    toast.success("Affectation supprimée avec succès !");
+    setDeleteTarget(null);
   };
 
   // ── Filtered rows ─────────────────────────────────────────────────────────
@@ -544,6 +463,7 @@ function AffectationsPage() {
         />
 
         <FilterBar>
+          {/* FIX: SelectInput.onChange expects (v: string) => void, not a ChangeEvent */}
           <SelectInput
             value={filterAnnee}
             onChange={(v) => setFilterAnnee(v)}
@@ -551,7 +471,7 @@ function AffectationsPage() {
             title="Filtrer par année"
           >
             <option value="">Toutes les années</option>
-            {(annees as any[]).map((a) => (
+            {annees.map((a) => (
               <option key={a.id} value={a.label}>
                 {a.label}
               </option>
@@ -565,9 +485,9 @@ function AffectationsPage() {
             title="Filtrer par semestre"
           >
             <option value="">Tous les semestres</option>
-            {calendarSemestres.map((s) => (
-              <option key={s.id} value={s.semestre?.code ?? `S${s.semestre?.numero}`}>
-                {s.semestre?.code ?? `S${s.semestre?.numero}`}
+            {SEMESTRES.map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </SelectInput>
@@ -579,7 +499,7 @@ function AffectationsPage() {
             title="Filtrer par groupe"
           >
             <option value="">Tous les groupes</option>
-            {(groupes as any[]).map((g) => (
+            {groupes.map((g) => (
               <option key={g.id} value={g.nom}>
                 {g.nom}
               </option>
@@ -600,48 +520,46 @@ function AffectationsPage() {
             </TR>
           </THead>
           <tbody>
-            {affectLoading ? (
-              <TR>
-                <TD colSpan={7} className="text-center py-8 text-muted-foreground">
-                  <Loader className="w-5 h-5 mx-auto mb-2 anim-spin" />
-                  Chargement des affectations...
+            {rows.map((a) => (
+              <TR key={a.id}>
+                <TD className="text-muted-foreground">{a.id}</TD>
+                <TD className="font-medium">{a.enseignant}</TD>
+                <TD>{a.matiere}</TD>
+                <TD className="font-mono">{a.groupe}</TD>
+                <TD>{a.semestre}</TD>
+                <TD>{a.annee}</TD>
+                <TD>
+                  <div className="flex justify-end gap-1">
+                    <ActionButton
+                      onClick={() => openEdit(a)}
+                      aria-label={`Modifier l'affectation de ${a.enseignant}`}
+                      title={`Modifier l'affectation de ${a.enseignant}`}
+                    >
+                      <Pencil className="w-4 h-4" aria-hidden="true" />
+                    </ActionButton>
+                    <ActionButton
+                      variant="danger"
+                      onClick={() => setDeleteTarget(a)}
+                      aria-label={`Supprimer l'affectation de ${a.enseignant}`}
+                      title={`Supprimer l'affectation de ${a.enseignant}`}
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </ActionButton>
+                  </div>
                 </TD>
               </TR>
-            ) : affectError ? (
-              <TR>
-                <TD colSpan={7} className="text-center py-8 text-red-600">
-                  Erreur: {String(affectError)}
-                </TD>
-              </TR>
-            ) : rows.length === 0 ? (
-              <TR>
-                <TD colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Aucune affectation trouvée
-                </TD>
-              </TR>
-            ) : (
-              rows.map((a) => (
-                <TR key={a.id}>
-                  <TD className="text-muted-foreground">{a.id}</TD>
-                  <TD className="font-medium">{a.enseignant}</TD>
-                  <TD>{a.matiere}</TD>
-                  <TD className="font-mono">{a.groupe}</TD>
-                  <TD>{a.semestre}</TD>
-                  <TD>{a.annee}</TD>
-                  <TD>
-                    <div className="flex justify-end gap-1">
-                      <ActionButton
-                        variant="danger"
-                        onClick={() => setDeleteTarget(a)}
-                        aria-label={`Supprimer l'affectation de ${a.enseignant}`}
-                        title={`Supprimer l'affectation de ${a.enseignant}`}
-                      >
-                        <Trash2 className="w-4 h-4" aria-hidden="true" />
-                      </ActionButton>
-                    </div>
-                  </TD>
-                </TR>
-              ))
+            ))}
+
+            {/* FIX: TD does not accept colSpan — use native <tr><td> */}
+            {rows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="py-10 text-gray-400 text-sm text-center"
+                >
+                  Aucune affectation ne correspond aux filtres sélectionnés.
+                </td>
+              </tr>
             )}
           </tbody>
         </DataTable>
@@ -650,24 +568,19 @@ function AffectationsPage() {
       {/* Form Modal (Add / Edit) */}
       <FormModal
         isOpen={formOpen}
-        mode="add"
-        initial={undefined}
+        mode={formMode}
+        initial={formInitial}
         onSave={handleSave}
         onCancel={() => setFormOpen(false)}
         isSaving={addMutation.isPending}
-        matieres={matieres}
-        enseignants={enseignants}
-        groupes={groupes}
-        calendarSemestres={calendarSemestres}
       />
 
-      {/* Delete Dialog */}
+      {/* Delete Confirmation */}
       <DeleteDialog
-        isOpen={deleteTarget !== null}
+        isOpen={!!deleteTarget}
         target={deleteTarget}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        isDeleting={deleteMutation.isPending}
       />
     </>
   );

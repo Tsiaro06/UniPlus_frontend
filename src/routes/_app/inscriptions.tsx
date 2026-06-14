@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Pencil, Trash2, X, Check, AlertTriangle, Eye, RefreshCw } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check, AlertTriangle, Eye, RefreshCw, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SearchInput, SelectInput } from "@/components/ui/filter-bar";
@@ -7,10 +7,10 @@ import { DataTable, THead, TH, TR, TD, Avatar, ActionButton } from "@/components
 import { StatusBadge } from "@/components/ui/badge-status";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { useApiList } from "@/lib/api/use-api-list";
-import { inscriptionsApi, anneesApi, groupesApi } from "@/lib/api/endpoints";
+import { inscriptionsApi, anneesApi, groupesApi, etudiantsApi } from "@/lib/api/endpoints";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Inscription {
@@ -27,51 +27,6 @@ interface Inscription {
 }
 
 type FormData = Omit<Inscription, "id">;
-
-function getEtudiantName(etudiant: unknown): string {
-  if (!etudiant) return "";
-  if (typeof etudiant === "string") return etudiant;
-  if (typeof etudiant === "object") {
-    const e = etudiant as { nom?: string; prenom?: string };
-    return [e.prenom, e.nom].filter(Boolean).join(" ");
-  }
-  return String(etudiant);
-}
-
-function getMatricule(item: { matricule?: string; etudiant?: unknown }): string {
-  if (typeof item.matricule === "string") return item.matricule;
-  if (item.etudiant && typeof item.etudiant === "object") {
-    return (item.etudiant as { matricule?: string }).matricule ?? "";
-  }
-  return "";
-}
-
-function getRelationLabel(value: unknown, key = "nom"): string {
-  if (!value) return "";
-  if (typeof value === "object") return String((value as Record<string, string>)[key] ?? "");
-  return String(value);
-}
-
-function getNiveauLabel(item: { niveau?: unknown; niveauAnnee?: unknown; groupe?: unknown }): string {
-  if (item.niveauAnnee && typeof item.niveauAnnee === "object") {
-    return String((item.niveauAnnee as { code?: string }).code ?? "");
-  }
-  if (item.niveau) return getRelationLabel(item.niveau, "niveau") || getRelationLabel(item.niveau, "code");
-  if (item.groupe && typeof item.groupe === "object") {
-    const g = item.groupe as { niveauAnnee?: { code?: string } };
-    if (g.niveauAnnee?.code) return g.niveauAnnee.code;
-  }
-  return "";
-}
-
-function getPaye(item: { paye?: boolean; montantPaye?: number; datePaiement?: string }): boolean {
-  if (typeof item.paye === "boolean") return item.paye;
-  return !!(item.montantPaye && item.montantPaye > 0) || !!item.datePaiement;
-}
-
-function getDateInscription(item: { dateInscription?: string; datePaiement?: string; createdAt?: string }): string {
-  return item.dateInscription ?? item.datePaiement ?? item.createdAt?.slice(0, 10) ?? "";
-}
 
 // ─── CSS Animations ───────────────────────────────────────────────────────────
 const ANIMATIONS = `
@@ -119,20 +74,20 @@ function DetailModal({ isOpen, inscription, onClose }: { isOpen: boolean; inscri
 
           <div className="space-y-6 p-6">
             <div className="flex items-center gap-4">
-              <Avatar name={getEtudiantName(inscription.etudiant)} />
+              <Avatar name={inscription.etudiant} />
               <div>
-                <div className="font-semibold text-2xl">{getEtudiantName(inscription.etudiant)}</div>
-                <div className="font-mono text-muted-foreground">{getMatricule(inscription)}</div>
+                <div className="font-semibold text-2xl">{inscription.etudiant}</div>
+                <div className="font-mono text-muted-foreground">{inscription.matricule}</div>
               </div>
             </div>
 
             <div className="gap-x-8 gap-y-3 grid grid-cols-2 text-sm">
-              <div><strong>Groupe :</strong> {getRelationLabel(inscription.groupe)}</div>
-              <div><strong>Filière :</strong> {getRelationLabel(inscription.filiere)}</div>
-              <div><strong>Niveau :</strong> {getNiveauLabel(inscription)}</div>
-              <div><strong>Date :</strong> {getDateInscription(inscription)}</div>
+              <div><strong>Groupe :</strong> {inscription.groupe}</div>
+              <div><strong>Filière :</strong> {inscription.filiere}</div>
+              <div><strong>Niveau :</strong> {inscription.niveau}</div>
+              <div><strong>Date :</strong> {inscription.dateInscription}</div>
               <div><strong>Statut :</strong> <StatusBadge status={inscription.statut} /></div>
-              <div><strong>Paiement :</strong> <StatusBadge status={getPaye(inscription) ? "paye" : "impaye"} /></div>
+              <div><strong>Paiement :</strong> <StatusBadge status={inscription.paye ? "paye" : "impaye"} /></div>
             </div>
 
             {inscription.estRedoublant && (
@@ -153,7 +108,7 @@ function DetailModal({ isOpen, inscription, onClose }: { isOpen: boolean; inscri
   );
 }
 
-// ─── Form Modal (Add/Edit) ────────────────────���──────────────────────────────
+// ─── Form Modal (Add/Edit) ───────────────────────────────────────────────────
 interface FormModalProps {
   isOpen: boolean;
   mode: "add" | "edit";
@@ -162,35 +117,59 @@ interface FormModalProps {
   onCancel: () => void;
   isSaving: boolean;
   groupes: any[];
+  etudiants: any[];
 }
 
-function FormModal({ isOpen, mode, initial, onSave, onCancel, isSaving, groupes }: FormModalProps) {
+function FormModal({ isOpen, mode, initial, onSave, onCancel, isSaving, groupes, etudiants }: FormModalProps) {
   const [form, setForm] = useState<FormData>({
     etudiant: "", matricule: "", groupe: "", filiere: "", niveau: "",
     statut: "actif", estRedoublant: false, dateInscription: "", paye: false,
   });
+  const [studentSearch, setStudentSearch] = useState("");
+  const [showStudentList, setShowStudentList] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter students based on search query
+  const filteredStudents = etudiants.filter(e =>
+    e.matricule.toLowerCase().includes(studentSearch.toLowerCase()) ||
+    `${e.nom} ${e.prenom}`.toLowerCase().includes(studentSearch.toLowerCase())
+  );
+
+  const selectStudent = (student: any) => {
+    setForm(f => ({
+      ...f,
+      etudiant: `${student.nom} ${student.prenom}`,
+      matricule: student.matricule
+    }));
+    setStudentSearch("");
+    setShowStudentList(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowStudentList(false);
+      }
+    };
+    if (showStudentList) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showStudentList]);
 
   useEffect(() => {
     if (isOpen && initial) {
-      setForm({
-        etudiant: getEtudiantName(initial.etudiant),
-        matricule: getMatricule(initial),
-        groupe: getRelationLabel(initial.groupe),
-        filiere: getRelationLabel(initial.filiere),
-        niveau: getNiveauLabel(initial),
-        statut: initial.statut ?? "actif",
-        estRedoublant: initial.estRedoublant ?? false,
-        dateInscription: getDateInscription(initial),
-        paye: getPaye(initial),
-      });
+      setForm({ ...initial } as FormData);
+      setStudentSearch("");
     } else if (isOpen) {
       setForm({ etudiant: "", matricule: "", groupe: "", filiere: "", niveau: "", statut: "actif", estRedoublant: false, dateInscription: "", paye: false });
+      setStudentSearch("");
     }
   }, [isOpen, initial]);
 
   if (!isOpen) return null;
 
-  const canSubmit = form.etudiant.trim() !== "" && form.matricule.trim() !== "" && !isSaving;
+  const canSubmit = form.etudiant.trim() !== "" && form.matricule.trim() !== "" && form.groupe.trim() !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -211,13 +190,54 @@ function FormModal({ isOpen, mode, initial, onSave, onCancel, isSaving, groupes 
           </div>
 
           <div className="space-y-4 px-6 py-5">
-            <Field label="Nom de l'étudiant *" htmlFor="etudiant">
-              <input id="etudiant" value={form.etudiant} onChange={e => setForm(f => ({...f, etudiant: e.target.value}))} placeholder="Ex : Jean Dupont" className={inputCls} />
+            <Field label="Sélectionner un étudiant *" htmlFor="student-search">
+              <div ref={dropdownRef} className="relative">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-3 w-4 h-4 text-gray-400" />
+                  <input
+                    id="student-search"
+                    type="text"
+                    value={studentSearch || form.matricule}
+                    onChange={e => {
+                      setStudentSearch(e.target.value);
+                      setShowStudentList(true);
+                    }}
+                    onFocus={() => setShowStudentList(true)}
+                    placeholder="Chercher par matricule ou nom..."
+                    className={inputCls + " pl-10"}
+                  />
+                </div>
+                
+                {showStudentList && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    {filteredStudents.length > 0 ? (
+                      filteredStudents.map(student => (
+                        <button
+                          key={student.id}
+                          type="button"
+                          onClick={() => selectStudent(student)}
+                          className="w-full text-left px-4 py-3 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors"
+                        >
+                          <div className="font-medium text-sm">{student.nom} {student.prenom}</div>
+                          <div className="text-xs text-gray-500 font-mono">{student.matricule}</div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-6 text-center text-gray-500 text-sm">
+                        {studentSearch ? "Aucun étudiant trouvé" : "Commencez à taper pour chercher"}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </Field>
 
-            <Field label="Matricule *" htmlFor="matricule">
-              <input id="matricule" value={form.matricule} onChange={e => setForm(f => ({...f, matricule: e.target.value.toUpperCase()}))} placeholder="Ex : U2024001" className={inputCls + " font-mono"} />
-            </Field>
+            {form.etudiant && form.matricule && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <div className="text-sm font-medium text-green-800 dark:text-green-200">{form.etudiant}</div>
+                <div className="text-xs text-green-600 dark:text-green-300 font-mono">{form.matricule}</div>
+              </div>
+            )}
 
             <Field label="Groupe" htmlFor="groupe">
               <select id="groupe" value={form.groupe} onChange={e => setForm(f => ({...f, groupe: e.target.value}))} title="Groupe" aria-label="Groupe" className={inputCls}>
@@ -281,7 +301,7 @@ function DeleteDialog({ isOpen, target, onConfirm, onCancel, isDeleting }: {
               <AlertTriangle className="w-8 h-8 text-red-600" />
             </div>
             <h3 className="mb-2 font-bold text-lg">Confirmer la suppression</h3>
-            <p className="text-gray-500">Voulez-vous vraiment supprimer l'inscription de <strong>{getEtudiantName(target.etudiant)}</strong> ?</p>
+            <p className="text-gray-500">Voulez-vous vraiment supprimer l'inscription de <strong>{target.etudiant}</strong> ?</p>
           </div>
           <div className="flex gap-3 px-6 pb-6">
             <button onClick={onCancel} className="flex-1 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl font-medium">Annuler</button>
@@ -315,43 +335,22 @@ function InscriptionsPage() {
 
   const { data: anneesData } = useApiList(["annees"], () => anneesApi.list?.() ?? Promise.resolve([]), []);
   const { data: groupesData } = useApiList(["groupes"], () => groupesApi.list?.() ?? Promise.resolve([]), []);
+  const { data: etudiantsData } = useApiList(["etudiants"], () => etudiantsApi.list?.() ?? Promise.resolve([]), []);
 
   const qc = useQueryClient();
 
-  const filteredData = (data as Inscription[]).filter((i) => {
-    const name = getEtudiantName(i.etudiant);
-    const matricule = getMatricule(i);
-    return (
-      (!q || `${name} ${matricule}`.toLowerCase().includes(q.toLowerCase())) &&
-      (!statut || i.statut === statut)
-    );
-  });
+  const filteredData = (data as Inscription[]).filter(i =>
+    (!q || `${i.etudiant} ${i.matricule}`.toLowerCase().includes(q.toLowerCase())) &&
+    (!statut || i.statut === statut)
+  );
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { matricule, etudiant, groupe: groupeLabel, filiere, niveau, statut, dateInscription, paye, ...data } = payload;
-      const matchedGroupe = (groupesData as any[]).find((g) => g.nom === groupeLabel || String(g.id) === String(groupeLabel));
-      const niveauAnneeId = matchedGroupe?.niveauAnneeId ?? matchedGroupe?.niveauAnnee?.id;
-      const anneeScolaireId = matchedGroupe?.anneeScolaireId ?? matchedGroupe?.anneeScolaire?.id;
-      if (!niveauAnneeId || !matchedGroupe?.id) {
-        throw new Error("niveauAnneeId requis — sélectionnez un groupe valide");
-      }
-      return inscriptionsApi.create({
-        ...data,
-        groupeId: Number(matchedGroupe.id),
-        niveauAnneeId: Number(niveauAnneeId),
-        anneeScolaireId: Number(anneeScolaireId),
-      } as any);
-    },
+    mutationFn: (payload: FormData) => inscriptionsApi.create?.(payload) ?? Promise.resolve({ ...payload, id: Date.now() }),
     onSuccess: () => { toast.success("Inscription ajoutée avec succès !"); qc.invalidateQueries({ queryKey: ["inscriptions"] }); refetch(); setFormOpen(false); },
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Inscription["id"] }) => {
-      const { matricule, etudiant, groupe, filiere, niveau, dateInscription, paye, ...data } = payload;
-      // PUT only accepts: statut, estRedoublant, numeroBordereau, montantPaye
-      return inscriptionsApi.update?.(id, data) ?? Promise.resolve({ id, ...data });
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Inscription["id"] }) => inscriptionsApi.update?.(id, payload) ?? Promise.resolve({ id, ...payload }),
     onSuccess: () => { toast.success("Inscription modifiée avec succès !"); qc.invalidateQueries({ queryKey: ["inscriptions"] }); refetch(); setFormOpen(false); },
   });
 
@@ -410,20 +409,20 @@ function InscriptionsPage() {
                 <TD className="text-muted-foreground">{i.id}</TD>
                 <TD>
                   <div className="flex items-center gap-3">
-                    <Avatar name={getEtudiantName(i.etudiant)} />
+                    <Avatar name={i.etudiant} />
                     <div>
-                      <div className="font-medium">{getEtudiantName(i.etudiant)}</div>
-                      <div className="font-mono text-muted-foreground text-xs">{getMatricule(i)}</div>
+                      <div className="font-medium">{i.etudiant}</div>
+                      <div className="font-mono text-muted-foreground text-xs">{i.matricule}</div>
                     </div>
                   </div>
                 </TD>
-                <TD className="font-medium">{getRelationLabel(i.groupe)}</TD>
-                <TD className="text-muted-foreground">{getRelationLabel(i.filiere)}</TD>
-                <TD>{getNiveauLabel(i)}</TD>
+                <TD className="font-medium">{i.groupe}</TD>
+                <TD className="text-muted-foreground">{i.filiere}</TD>
+                <TD>{i.niveau}</TD>
                 <TD><StatusBadge status={i.statut} /></TD>
                 <TD>{i.estRedoublant && <RefreshCw className="w-4 h-4 text-amber-600" />}</TD>
-                <TD className="text-muted-foreground">{getDateInscription(i)}</TD>
-                <TD><StatusBadge status={getPaye(i) ? "paye" : "impaye"} /></TD>
+                <TD className="text-muted-foreground">{i.dateInscription}</TD>
+                <TD><StatusBadge status={i.paye ? "paye" : "impaye"} /></TD>
                 <TD>
                   <div className="flex justify-end gap-1">
                     <ActionButton onClick={() => setDetailTarget(i)}><Eye className="w-4 h-4" /></ActionButton>
@@ -437,7 +436,7 @@ function InscriptionsPage() {
         </DataTable>
       </div>
 
-      <FormModal isOpen={formOpen} mode={formMode} initial={formInitial} onSave={handleSave} onCancel={() => setFormOpen(false)} isSaving={add.isPending || edit.isPending} groupes={groupesData} />
+      <FormModal isOpen={formOpen} mode={formMode} initial={formInitial} onSave={handleSave} onCancel={() => setFormOpen(false)} isSaving={add.isPending || edit.isPending} groupes={groupesData} etudiants={etudiantsData} />
 
       <DeleteDialog isOpen={!!deleteTarget} target={deleteTarget} onConfirm={() => deleteTarget && del.mutate(deleteTarget.id)} onCancel={() => setDeleteTarget(null)} isDeleting={del.isPending} />
 

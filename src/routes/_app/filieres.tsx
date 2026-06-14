@@ -219,9 +219,10 @@ function FormModal({
                 className={inputCls}
               >
                 <option value="">Sélectionner...</option>
-                <option value="L">Licence</option>
-                <option value="M">Master</option>
-              
+                <option value="Licence">Licence</option>
+                <option value="Master">Master</option>
+                <option value="Doctorat">Doctorat</option>
+                <option value="BTS">BTS</option>
               </select>
             </Field>
 
@@ -371,11 +372,7 @@ function FilieresPage() {
   const [deleteTarget, setDeleteTarget] = useState<Filiere | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { nbGroupes, ...data } = payload;
-      // POST expects: departementId, nom, code, typeDiplome, dureeAnnees
-      return filieresApi.create(data);
-    },
+    mutationFn: (payload: FormData) => filieresApi.create(payload),
     onSuccess: () => {
       toast.success("Filière ajoutée avec succès !");
       qc.invalidateQueries({ queryKey: ["filieres"] });
@@ -386,11 +383,8 @@ function FilieresPage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Filiere["id"] }) => {
-      const { code, departementId, nbGroupes, ...data } = payload;
-      // PUT only accepts: nom, description, typeDiplome, dureeAnnees
-      return filieresApi.update(id, data);
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Filiere["id"] }) =>
+      filieresApi.update(id, payload),
     onSuccess: () => {
       toast.success("Filière modifiée avec succès !");
       qc.invalidateQueries({ queryKey: ["filieres"] });

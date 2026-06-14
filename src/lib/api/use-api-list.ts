@@ -1,21 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 
-/** Normalize paginated / nested API list responses into a flat array. */
-export function extractApiList<T = unknown>(res: unknown): T[] {
-  if (Array.isArray(res)) return res as T[];
-  if (res && typeof res === "object") {
-    const root = res as Record<string, unknown>;
-    if (Array.isArray(root.data)) return root.data as T[];
-    if (root.data && typeof root.data === "object") {
-      const nested = root.data as Record<string, unknown>;
-      if (Array.isArray(nested.data)) return nested.data as T[];
-      if (Array.isArray(nested.items)) return nested.items as T[];
-    }
-    if (Array.isArray(root.items)) return root.items as T[];
-  }
-  return [];
-}
-
 /**
  * Hook wrapper for fetching lists from the API.
  * Handles paginated responses and normalizes data structure.
@@ -27,7 +11,20 @@ export function useApiList<T>(
 ) {
   const query = useQuery({
     queryKey: key,
-    queryFn: async () => extractApiList<T>(await fetcher()),
+    queryFn: async () => {
+      const res = await fetcher();
+      // Handle different response formats
+      if (Array.isArray(res)) return res;
+      if (res?.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
+      }
+      if (res?.items) {
+        if (Array.isArray(res.items)) return res.items;
+        if (res.items.items && Array.isArray(res.items.items)) return res.items.items;
+      }
+      return [];
+    },
     retry: 2,
     staleTime: 30_000,
   });

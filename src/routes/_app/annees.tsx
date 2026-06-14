@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Pencil, Trash2, X, Check, AlertTriangle, Calendar } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data-table";
@@ -8,8 +8,6 @@ import { toast } from "sonner";
 import { useApiList } from "@/lib/api/use-api-list";
 import { anneesApi } from "@/lib/api/endpoints";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -114,9 +112,6 @@ function FormModal({
     nbSemestres: 2,
   });
 
-  const [openDebutCalendar, setOpenDebutCalendar] = useState(false);
-  const [openFinCalendar, setOpenFinCalendar] = useState(false);
-
   useEffect(() => {
     if (isOpen) {
       setForm({
@@ -128,36 +123,6 @@ function FormModal({
       });
     }
   }, [isOpen, initial]);
-
-  const formatDateForDisplay = (dateString: string): string => {
-    if (!dateString) return "";
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
-  const handleDateSelect = (date: Date | undefined, field: "dateDebut" | "dateFin") => {
-    if (date) {
-      const isoDate = date.toISOString().split("T")[0];
-      setForm((f) => ({ ...f, [field]: isoDate }));
-    }
-  };
-
-  const parseDateForCalendar = (dateString: string): Date | undefined => {
-    if (!dateString) return undefined;
-    try {
-      return new Date(dateString);
-    } catch {
-      return undefined;
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -220,64 +185,24 @@ function FormModal({
 
             <div className="gap-4 grid grid-cols-2">
               <Field label="Date début" htmlFor="annee-debut">
-                <Popover open={openDebutCalendar} onOpenChange={setOpenDebutCalendar}>
-                  <PopoverTrigger asChild>
-                    <button
-                      id="annee-debut"
-                      type="button"
-                      className={`${inputCls} flex items-center justify-between`}
-                    >
-                      <span className={form.dateDebut ? "text-gray-900 dark:text-gray-100" : "text-gray-400"}>
-                        {form.dateDebut ? formatDateForDisplay(form.dateDebut) : "Sélectionner une date"}
-                      </span>
-                      <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={parseDateForCalendar(form.dateDebut)}
-                      onSelect={(date) => {
-                        handleDateSelect(date, "dateDebut");
-                        setOpenDebutCalendar(false);
-                      }}
-                      disabled={(date) => {
-                        const finDate = parseDateForCalendar(form.dateFin);
-                        return finDate ? date > finDate : false;
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <input
+                  id="annee-debut"
+                  type="text"
+                  value={form.dateDebut}
+                  onChange={(e) => setForm((f) => ({ ...f, dateDebut: e.target.value }))}
+                  placeholder="Ex : 01/09/2024"
+                  className={inputCls}
+                />
               </Field>
               <Field label="Date fin" htmlFor="annee-fin">
-                <Popover open={openFinCalendar} onOpenChange={setOpenFinCalendar}>
-                  <PopoverTrigger asChild>
-                    <button
-                      id="annee-fin"
-                      type="button"
-                      className={`${inputCls} flex items-center justify-between`}
-                    >
-                      <span className={form.dateFin ? "text-gray-900 dark:text-gray-100" : "text-gray-400"}>
-                        {form.dateFin ? formatDateForDisplay(form.dateFin) : "Sélectionner une date"}
-                      </span>
-                      <Calendar className="w-4 h-4 text-gray-400" aria-hidden="true" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto p-0">
-                    <CalendarComponent
-                      mode="single"
-                      selected={parseDateForCalendar(form.dateFin)}
-                      onSelect={(date) => {
-                        handleDateSelect(date, "dateFin");
-                        setOpenFinCalendar(false);
-                      }}
-                      disabled={(date) => {
-                        const debutDate = parseDateForCalendar(form.dateDebut);
-                        return debutDate ? date < debutDate : false;
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
+                <input
+                  id="annee-fin"
+                  type="text"
+                  value={form.dateFin}
+                  onChange={(e) => setForm((f) => ({ ...f, dateFin: e.target.value }))}
+                  placeholder="Ex : 30/06/2025"
+                  className={inputCls}
+                />
               </Field>
             </div>
 
@@ -451,11 +376,7 @@ function AnneesPage() {
 
   // ── Mutations ──────────────────────────────────────────────────────────
   const create = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { nbSemestres, ...data } = payload;
-      // Only send label, dateDebut, dateFin, and actif to the API
-      return anneesApi.create(data);
-    },
+    mutationFn: (payload: FormData) => anneesApi.create(payload),
     onSuccess: () => {
       toast.success("Année scolaire ajoutée");
       qc.invalidateQueries({ queryKey: ["annees-scolaires"] });
@@ -466,28 +387,12 @@ function AnneesPage() {
   });
 
   const update = useMutation({
-    mutationFn: (data: FormData & { id: Annee["id"] }) => {
-      const { id, nbSemestres, ...payload } = data;
-      // Only send label, dateDebut, dateFin, and actif to the API
-      return anneesApi.update(id, payload);
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Annee["id"] }) => anneesApi.update(id, payload),
     onSuccess: () => {
       toast.success("Année scolaire modifiée");
       qc.invalidateQueries({ queryKey: ["annees-scolaires"] });
       refetch();
       setFormOpen(false);
-    },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur"),
-  });
-
-  const toggleActive = useMutation({
-    mutationFn: (data: { id: Annee["id"]; actif: boolean }) =>
-      anneesApi.update(data.id, { actif: data.actif }),
-    onSuccess: () => {
-      toast.success("Statut mis à jour");
-      qc.invalidateQueries({ queryKey: ["annees-scolaires"] });
-      qc.invalidateQueries({ queryKey: ["annees-active"] });
-      refetch();
     },
     onError: (e: any) => toast.error(e?.message ?? "Erreur"),
   });
@@ -567,10 +472,8 @@ function AnneesPage() {
                   <label className="inline-flex relative items-center w-9 h-5 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={a.actif}
-                      onChange={(e) => toggleActive.mutate({ id: a.id, actif: e.target.checked })}
-                      disabled={toggleActive.isPending}
-                      className="sr-only peer disabled:opacity-50 disabled:cursor-not-allowed"
+                      defaultChecked={a.actif}
+                      className="sr-only peer"
                       aria-label={`Activer l'année ${a.label}`}
                       title={`Activer l'année ${a.label}`}
                     />

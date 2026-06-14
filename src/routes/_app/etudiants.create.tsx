@@ -34,11 +34,7 @@ function EtudiantCreatePage() {
   const set = (k: string, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
   const mutation = useMutation({
-    mutationFn: () => {
-      const { statut, ...data } = form;
-      // POST expects: matricule, nom, prenom, dateNaissance, lieuNaissance, sexe, email, telephone, adresse
-      return etudiantsApi.create(data);
-    },
+    mutationFn: () => etudiantsApi.create(form),
     onSuccess: () => { toast.success("Étudiant créé"); navigate({ to: "/etudiants" }); },
     onError: (e: any) => toast.error(e?.message ?? "Création impossible — API hors-ligne"),
   });

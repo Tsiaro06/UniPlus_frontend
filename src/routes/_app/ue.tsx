@@ -7,38 +7,24 @@ import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data
 import { StatusBadge } from "@/components/ui/badge-status";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { useApiList } from "@/lib/api/use-api-list";
-import { ueApi , filieresApi } from "@/lib/api/endpoints";
+import { ueApi } from "@/lib/api/endpoints";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { NIVEAU_CODES } from "@/lib/lmd";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface Ue {
   id: number | string;
   code: string;
   intitule: string;
-  filiere: string | { id: number | string; nom: string; code?: string };
-  niveauCode: string;
+  filiere: string;
+  semestre: number;
   typeUe: string;
-  creditsEcts: number;
-  nbMatieres?: number;
-  /** @deprecated use niveauCode */
-  semestre?: number;
+  credits: number;
+  nbMatieres: number;
 }
 
-type FormData = {
-  code: string;
-  intitule: string;
-  filiereId: number | "";
-  niveauCode: string;
-  typeUe: string;
-  creditsEcts: number;
-};
-
-function getFiliereName(filiere: Ue["filiere"]): string {
-  if (!filiere) return "";
-  if (typeof filiere === "object") return filiere.nom || filiere.code || "";
-  return String(filiere);
-}
+type FormData = Omit<Ue, "id">;
 
 // ─── CSS Animations ───────────────────────────────────────────────────────────
 const ANIMATIONS = `
@@ -107,7 +93,6 @@ interface FormModalProps {
   onSave: (data: FormData & { id?: Ue["id"] }) => void;
   onCancel: () => void;
   isSaving: boolean;
-  filieres: { id: number | string; nom: string }[];
 }
 
 function FormModal({
@@ -117,51 +102,38 @@ function FormModal({
   onSave,
   onCancel,
   isSaving,
-  filieres,
 }: FormModalProps) {
   const [form, setForm] = useState<FormData>({
     code: "",
     intitule: "",
-    filiereId: "",
-    niveauCode: "L1",
+    filiere: "",
+    semestre: 1,
     typeUe: "",
-    creditsEcts: 0,
+    credits: 0,
+    nbMatieres: 0,
   });
 
   useEffect(() => {
     if (isOpen) {
-      let filiereId: number | "" = "";
-      if (initial?.filiere) {
-        if (typeof initial.filiere === "object") {
-          filiereId = Number(initial.filiere.id) || "";
-        } else {
-          const found = filieres.find(f => f.nom === initial.filiere || f.id === initial.filiere);
-          filiereId = found ? Number(found.id) || "" : "";
-        }
-      }
-
       setForm({
         code: initial?.code ?? "",
         intitule: initial?.intitule ?? "",
-        filiereId,
-        niveauCode: initial?.niveauCode ?? "L1",
+        filiere: initial?.filiere ?? "",
+        semestre: initial?.semestre ?? 1,
         typeUe: initial?.typeUe ?? "",
-        creditsEcts: initial?.creditsEcts ?? 0,
+        credits: initial?.credits ?? 0,
+        nbMatieres: initial?.nbMatieres ?? 0,
       });
     }
-  }, [isOpen, initial, filieres]);
+  }, [isOpen, initial]);
 
   if (!isOpen) return null;
 
-  const canSubmit = form.code.trim() !== "" && form.intitule.trim() !== "" && form.filiereId !== "" && form.niveauCode !== "" && !isSaving;
+  const canSubmit = form.code.trim() !== "" && form.intitule.trim() !== "" && form.filiere.trim() !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSave({
-      ...form,
-      filiereId: Number(form.filiereId),
-      ...(initial?.id !== undefined ? { id: initial.id } : {}),
-    });
+    onSave({ ...form, ...(initial?.id !== undefined ? { id: initial.id } : {}) });
   };
 
   return (
@@ -218,30 +190,30 @@ function FormModal({
             <Field label="Filière *" htmlFor="ue-filiere">
               <select
                 id="ue-filiere"
-                value={form.filiereId}
-                onChange={(e) => setForm((f) => ({ ...f, filiereId: e.target.value ? Number(e.target.value) : "" }))}
+                value={form.filiere}
+                onChange={(e) => setForm((f) => ({ ...f, filiere: e.target.value }))}
                 title="Filière rattachée"
                 className={inputCls}
               >
                 <option value="">Sélectionner une filière</option>
                 {filieres.map((f) => (
-                  <option key={f.id} value={f.id}>
+                  <option key={f.id} value={f.nom}>
                     {f.nom}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Niveau *" htmlFor="ue-niveau">
+            <Field label="Semestre *" htmlFor="ue-semestre">
               <select
-                id="ue-niveau"
-                value={form.niveauCode}
-                onChange={(e) => setForm((f) => ({ ...f, niveauCode: e.target.value }))}
-                title="Niveau (L1–M2)"
+                id="ue-semestre"
+                value={form.semestre}
+                onChange={(e) => setForm((f) => ({ ...f, semestre: +e.target.value }))}
+                title="Semestre"
                 className={inputCls}
               >
-                {NIVEAU_CODES.map((n) => (
-                  <option key={n} value={n}>{n}</option>
+                {[1, 2, 3, 4, 5, 6].map((s) => (
+                  <option key={s} value={s}>S{s}</option>
                 ))}
               </select>
             </Field>
@@ -255,23 +227,37 @@ function FormModal({
                 className={inputCls}
               >
                 <option value="">Sélectionner...</option>
-                <option value="fondamentale">Fondamentale</option>
-                <option value="optionnelle">Optionnelle</option>
-                <option value="transversale">Transversale</option>
+                <option value="Fondamentale">Fondamentale</option>
+                <option value="Méthodologique">Méthodologique</option>
+                <option value="Transversale">Transversale</option>
+                <option value="Découverte">Découverte</option>
               </select>
             </Field>
 
-            <Field label="ECTS / Crédits" htmlFor="ue-credits">
-              <input
-                id="ue-credits"
-                type="number"
-                min={0}
-                value={form.creditsEcts}
-                onChange={(e) => setForm((f) => ({ ...f, creditsEcts: Math.max(0, +e.target.value) }))}
-                title="Nombre de crédits ECTS"
-                className={inputCls}
-              />
-            </Field>
+            <div className="gap-4 grid grid-cols-2">
+              <Field label="ECTS / Crédits" htmlFor="ue-credits">
+                <input
+                  id="ue-credits"
+                  type="number"
+                  min={0}
+                  value={form.credits}
+                  onChange={(e) => setForm((f) => ({ ...f, credits: Math.max(0, +e.target.value) }))}
+                  title="Nombre de crédits ECTS"
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Nombre de matières" htmlFor="ue-matieres">
+                <input
+                  id="ue-matieres"
+                  type="number"
+                  min={0}
+                  value={form.nbMatieres}
+                  onChange={(e) => setForm((f) => ({ ...f, nbMatieres: Math.max(0, +e.target.value) }))}
+                  title="Nombre de matières"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
           </div>
 
           <div className="flex gap-3 px-6 pb-6">
@@ -373,10 +359,6 @@ function UePage() {
     ["ues"],
     () => ueApi.list(),
   );
-  const { data: filieres } = useApiList<{ id: number | string; nom: string }>(
-    ["filieres"],
-    () => filieresApi.list({ limit: 1000 }),
-  );
 
   const qc = useQueryClient();
 
@@ -386,10 +368,7 @@ function UePage() {
   const [deleteTarget, setDeleteTarget] = useState<Ue | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      // POST expects: filiereId, niveauCode, code, intitule, creditsEcts, typeUe
-      return ueApi.create(payload);
-    },
+    mutationFn: (payload: FormData) => ueApi.create(payload),
     onSuccess: () => {
       toast.success("UE ajoutée avec succès !");
       qc.invalidateQueries({ queryKey: ["ues"] });
@@ -400,11 +379,8 @@ function UePage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Ue["id"] }) => {
-      const { code, filiereId, niveauCode, ...data } = payload;
-      // PUT only accepts: intitule, creditsEcts, typeUe
-      return ueApi.update(id, data);
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Ue["id"] }) =>
+    ueApi.update(id, payload),
     onSuccess: () => {
       toast.success("UE modifiée avec succès !");
       qc.invalidateQueries({ queryKey: ["ues"] });
@@ -466,9 +442,9 @@ function UePage() {
             ))}
           </SelectInput>
           <SelectInput>
-            <option value="">Tous les niveaux</option>
-            {NIVEAU_CODES.map((n) => (
-              <option key={n} value={n}>{n}</option>
+            <option>Tous les semestres</option>
+            {[1, 2, 3, 4, 5, 6].map((s) => (
+              <option key={s}>S{s}</option>
             ))}
           </SelectInput>
         </FilterBar>
@@ -482,7 +458,7 @@ function UePage() {
               <TH>Code</TH>
               <TH>Intitulé</TH>
               <TH>Filière</TH>
-              <TH>Niveau</TH>
+              <TH>Semestre</TH>
               <TH>Type</TH>
               <TH>ECTS</TH>
               <TH>Matières</TH>
@@ -499,12 +475,12 @@ function UePage() {
                   </span>
                 </TD>
                 <TD className="font-medium">{u.intitule}</TD>
-                <TD>{getFiliereName(u.filiere)}</TD>
-                <TD>{u.niveauCode ?? u.semestre ?? "—"}</TD>
+                <TD>{u.filiere}</TD>
+                <TD>S{u.semestre}</TD>
                 <TD>
                   <StatusBadge status={u.typeUe} />
                 </TD>
-                <TD>{u.creditsEcts ?? (u as any).credits}</TD>
+                <TD>{u.credits}</TD>
                 <TD>{u.nbMatieres}</TD>
                 <TD>
                   <div className="flex justify-end gap-1">
@@ -538,7 +514,6 @@ function UePage() {
         onSave={handleSave}
         onCancel={() => setFormOpen(false)}
         isSaving={add.isPending || edit.isPending}
-        filieres={filieres}
       />
 
       <DeleteDialog

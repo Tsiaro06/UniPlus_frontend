@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
 import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data-table";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
-import { useApiList, extractApiList } from "@/lib/api/use-api-list";
-import { matieresApi, ueApi, semestresApi, anneesApi } from "@/lib/api/endpoints";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { semestresForNiveau, resolveCalendarSemestreId, type SemestreCatalog, type AnneeScolaireSemestre } from "@/lib/lmd";
+import { useApiList } from "@/lib/api/use-api-list";
+import { matieresApi } from "@/lib/api/endpoints";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 
@@ -17,20 +16,12 @@ interface Matiere {
   id: number | string;
   code: string;
   intitule: string;
-  ue: string | { id: number | string; code: string; intitule?: string; niveauCode?: string };
-  semestreId?: number;
-  semestre?: SemestreCatalog;
+  ue: string;
   coefficient: number;
   volumeHoraire: number;
 }
 
-type FormData = Omit<Matiere, "id" | "semestre"> & { ue: string; semestreId: number | "" };
-
-function getUeLabel(ue: Matiere["ue"]): string {
-  if (!ue) return "";
-  if (typeof ue === "object") return ue.code || ue.intitule || "";
-  return String(ue);
-}
+type FormData = Omit<Matiere, "id">;
 
 // ─── CSS Animations ───────────────────────────────────────────────────────────
 const ANIMATIONS = `
@@ -99,9 +90,6 @@ interface FormModalProps {
   onSave: (data: FormData & { id?: Matiere["id"] }) => void;
   onCancel: () => void;
   isSaving: boolean;
-  ues: { id: number | string; code: string; intitule: string; niveauCode?: string }[];
-  semestres: SemestreCatalog[];
-  activeAnneeLabel?: string;
 }
 
 function FormModal({
@@ -111,31 +99,21 @@ function FormModal({
   onSave,
   onCancel,
   isSaving,
-  ues,
-  semestres,
-  activeAnneeLabel,
 }: FormModalProps) {
   const [form, setForm] = useState<FormData>({
     code: "",
     intitule: "",
     ue: "",
-    semestreId: "",
     coefficient: 1,
     volumeHoraire: 0,
   });
-
-  const selectedUe = ues.find((u) => u.code === form.ue);
-  const validSemestres = selectedUe?.niveauCode
-    ? semestres.filter((s) => semestresForNiveau(selectedUe.niveauCode!).includes(s.numero))
-    : semestres;
 
   useEffect(() => {
     if (isOpen) {
       setForm({
         code: initial?.code ?? "",
         intitule: initial?.intitule ?? "",
-        ue: getUeLabel(initial?.ue ?? ""),
-        semestreId: initial?.semestreId ?? initial?.semestre?.id ?? "",
+        ue: initial?.ue ?? "",
         coefficient: initial?.coefficient ?? 1,
         volumeHoraire: initial?.volumeHoraire ?? 0,
       });
@@ -144,7 +122,7 @@ function FormModal({
 
   if (!isOpen) return null;
 
-  const canSubmit = form.code.trim() !== "" && form.intitule.trim() !== "" && form.ue.trim() !== "" && form.semestreId !== "" && !isSaving;
+  const canSubmit = form.code.trim() !== "" && form.intitule.trim() !== "" && form.ue.trim() !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -206,7 +184,7 @@ function FormModal({
               <select
                 id="matiere-ue"
                 value={form.ue}
-                onChange={(e) => setForm((f) => ({ ...f, ue: e.target.value, semestreId: "" }))}
+                onChange={(e) => setForm((f) => ({ ...f, ue: e.target.value }))}
                 title="UE rattachée"
                 className={inputCls}
               >
@@ -215,33 +193,6 @@ function FormModal({
                   <option key={u.id} value={u.code}>
                     {u.code} - {u.intitule}
                   </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Semestre *" htmlFor="matiere-semestre">
-              {mode === "add" && activeAnneeLabel && (
-                <p className="mb-1 text-muted-foreground text-xs">
-                  Année scolaire active : <strong>{activeAnneeLabel}</strong>
-                </p>
-              )}
-              <select
-                id="matiere-semestre"
-                value={form.semestreId}
-                onChange={(e) => setForm((f) => ({ ...f, semestreId: e.target.value ? Number(e.target.value) : "" }))}
-                title="Semestre S1–S10 pour l'année active"
-                className={inputCls}
-                disabled={!form.ue || (mode === "add" && !activeAnneeLabel)}
-              >
-                <option value="">
-                  {!form.ue
-                    ? "Sélectionnez d'abord une UE"
-                    : mode === "add" && !activeAnneeLabel
-                      ? "Aucune année scolaire active"
-                      : "Sélectionner un semestre"}
-                </option>
-                {validSemestres.map((s) => (
-                  <option key={s.id} value={s.id}>{s.code} ({s.type})</option>
                 ))}
               </select>
             </Field>
@@ -372,30 +323,6 @@ function MatieresPage() {
     ["matieres"],
     () => matieresApi.list(),
   );
-  const { data: ues } = useApiList<{ id: number | string; code: string; intitule: string; niveauCode?: string }>(
-    ["ues"],
-    () => ueApi.list({ limit: 1000 }),
-  );
-  const { data: semestresCatalog } = useApiList<SemestreCatalog>(
-    ["semestres-catalog"],
-    () => semestresApi.list({ limit: 20 }),
-  );
-  const semestres = (semestresCatalog as SemestreCatalog[]).slice().sort((a, b) => a.numero - b.numero);
-
-  const { data: activeAnneeRaw } = useQuery({
-    queryKey: ["annee-active"],
-    queryFn: () => anneesApi.active(),
-  });
-  const activeAnnee = (activeAnneeRaw as any)?.data ?? activeAnneeRaw;
-
-  const { data: calendarSemestres = [] } = useQuery({
-    queryKey: ["annee-semestres", activeAnnee?.id],
-    queryFn: async () => {
-      const res = await anneesApi.listSemestres(activeAnnee.id);
-      return extractApiList<AnneeScolaireSemestre>(res);
-    },
-    enabled: !!activeAnnee?.id,
-  });
 
   const qc = useQueryClient();
 
@@ -405,36 +332,7 @@ function MatieresPage() {
   const [deleteTarget, setDeleteTarget] = useState<Matiere | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const selectedUe = ues.find((u) => u.code === payload.ue);
-      if (!selectedUe) {
-        throw new Error("UE sélectionnée non trouvée");
-      }
-      if (!activeAnnee?.id) {
-        throw new Error("Aucune année scolaire active");
-      }
-
-      const catalogSemestreId = Number(payload.semestreId);
-      if (!Number.isInteger(catalogSemestreId) || catalogSemestreId < 1) {
-        throw new Error("Sélectionnez un semestre valide (S1–S10)");
-      }
-
-      const anneeScolaireSemestreId = resolveCalendarSemestreId(calendarSemestres, catalogSemestreId);
-      if (!anneeScolaireSemestreId) {
-        throw new Error(
-          `Semestre S${catalogSemestreId} introuvable pour l'année ${activeAnnee.label ?? activeAnnee.id}`,
-        );
-      }
-
-      return matieresApi.create({
-        code: payload.code.trim(),
-        intitule: payload.intitule.trim(),
-        ueId: parseInt(String(selectedUe.id), 10),
-        anneeScolaireSemestreId,
-        coefficient: parseFloat(String(payload.coefficient)),
-        volumeHoraire: parseInt(String(payload.volumeHoraire), 10),
-      });
-    },
+    mutationFn: (payload: FormData) => matieresApi.create(payload),
     onSuccess: () => {
       toast.success("Matière ajoutée avec succès !");
       qc.invalidateQueries({ queryKey: ["matieres"] });
@@ -445,16 +343,8 @@ function MatieresPage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Matiere["id"] }) => {
-      const { code, ue, ueId, ...data } = payload;
-      // PUT only accepts: intitule, coefficient, volumeHoraire, description
-      // Convert numeric fields to proper types
-      return matieresApi.update(id, {
-        intitule: data.intitule,
-        coefficient: parseFloat(String(data.coefficient)), // Convert to number
-        volumeHoraire: parseInt(String(data.volumeHoraire), 10), // Convert to integer
-      });
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Matiere["id"] }) =>
+      matieresApi.update(id, payload),
     onSuccess: () => {
       toast.success("Matière modifiée avec succès !");
       qc.invalidateQueries({ queryKey: ["matieres"] });
@@ -465,7 +355,7 @@ function MatieresPage() {
   });
 
   const del = useMutation({
-    mutationFn: (id: Matiere["id"]) => matieresApi.remove?.(id) ?? Promise.resolve(id),
+    mutationFn: (id: Matiere["id"]) => matieresApi.remove(id),
     onSuccess: () => {
       toast.success("Matière supprimée avec succès !");
       qc.invalidateQueries({ queryKey: ["matieres"] });
@@ -526,7 +416,6 @@ function MatieresPage() {
               <TH>Code</TH>
               <TH>Intitulé</TH>
               <TH>UE</TH>
-              <TH>Semestre</TH>
               <TH>Coefficient</TH>
               <TH>Volume horaire</TH>
               <TH className="text-right">Actions</TH>
@@ -542,8 +431,7 @@ function MatieresPage() {
                   </span>
                 </TD>
                 <TD className="font-medium">{m.intitule}</TD>
-                <TD>{getUeLabel(m.ue)}</TD>
-                <TD>{m.semestre?.code ?? (m.semestreId ? `#${m.semestreId}` : "—")}</TD>
+                <TD>{m.ue}</TD>
                 <TD>{m.coefficient}</TD>
                 <TD>{m.volumeHoraire}h</TD>
                 <TD>
@@ -578,9 +466,6 @@ function MatieresPage() {
         onSave={handleSave}
         onCancel={() => setFormOpen(false)}
         isSaving={add.isPending || edit.isPending}
-        ues={ues}
-        semestres={semestres}
-        activeAnneeLabel={activeAnnee?.label}
       />
 
       <DeleteDialog

@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
 import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data-table";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
-import { useApiList, extractApiList } from "@/lib/api/use-api-list";
-import { groupesApi, filieresApi, anneesApi, niveauxAnneeApi } from "@/lib/api/endpoints";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { NiveauAnnee } from "@/lib/lmd";
+import { useApiList } from "@/lib/api/use-api-list";
+import { groupesApi, filieresApi, anneesApi } from "@/lib/api/endpoints";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 
@@ -18,33 +17,17 @@ interface Groupe {
   nom: string;
   filiereId?: number | string;
   filiere?: string | { id: number | string; nom: string; code: string };
-  niveauAnneeId?: number | string;
-  niveauAnnee?: string | { id: number; code: string };
+  niveauAnnee: string;
   anneeScolaireId?: number | string;
   anneeScolaire?: string | { id: number | string; label: string };
   capaciteMax: number;
   nbInscrits: number;
 }
 
-type FormData = {
-  nom: string;
-  filiereId: string;
-  anneeScolaireId: string;
-  niveauAnneeId: string;
-  capaciteMax: number;
-  nbInscrits: number;
+type FormData = Omit<Groupe, "id" | "filiere" | "anneeScolaire"> & {
+  filiereId: number | string;
+  anneeScolaireId: number | string;
 };
-
-function toSelectId(value: unknown): string {
-  if (value === undefined || value === null || value === "") return "";
-  return String(value);
-}
-
-function getNiveauCode(g: Groupe): string {
-  if (typeof g.niveauAnnee === "object" && g.niveauAnnee?.code) return g.niveauAnnee.code;
-  if (typeof g.niveauAnnee === "string") return g.niveauAnnee;
-  return "";
-}
 
 // ─── CSS Animations ───────────────────────────────────────────────────────────
 const ANIMATIONS = `
@@ -130,74 +113,30 @@ function FormModal({
   const [form, setForm] = useState<FormData>({
     nom: "",
     filiereId: "",
-    niveauAnneeId: "",
+    niveauAnnee: "L1",
     anneeScolaireId: "",
     capaciteMax: 30,
     nbInscrits: 0,
-  });
-
-  const canFetchNiveaux = isOpen && !!form.anneeScolaireId && !!form.filiereId;
-
-  const {
-    data: niveauxOptions = [],
-    isLoading: niveauxLoading,
-    isError: niveauxError,
-  } = useQuery({
-    queryKey: ["niveaux-annee", form.anneeScolaireId, form.filiereId],
-    queryFn: async () => {
-      const anneeScolaireId = Number(form.anneeScolaireId);
-      const filiereId = Number(form.filiereId);
-      const res = await niveauxAnneeApi.list({
-        anneeScolaireId,
-        filiereId,
-        limit: 50,
-      });
-      let list = extractApiList<NiveauAnnee>(res);
-      // Fallback: fetch by year only and filter client-side
-      if (list.length === 0) {
-        const fallback = await niveauxAnneeApi.list({ anneeScolaireId, limit: 200 });
-        list = extractApiList<NiveauAnnee>(fallback).filter(
-          (n) => Number(n.filiereId) === filiereId,
-        );
-      }
-      return list;
-    },
-    enabled: canFetchNiveaux,
   });
 
   useEffect(() => {
     if (isOpen) {
       const fId = initial?.filiereId ?? (typeof initial?.filiere === "object" ? initial?.filiere?.id : "");
       const aId = initial?.anneeScolaireId ?? (typeof initial?.anneeScolaire === "object" ? initial?.anneeScolaire?.id : "");
-      const nId = initial?.niveauAnneeId ?? (typeof initial?.niveauAnnee === "object" ? initial?.niveauAnnee?.id : "");
       setForm({
-        nom: initial?.nom ?? "",
-        filiereId: toSelectId(fId),
-        niveauAnneeId: toSelectId(nId),
-        anneeScolaireId: toSelectId(aId),
-        capaciteMax: initial?.capaciteMax ?? 30,
-        nbInscrits: initial?.nbInscrits ?? 0,
+        nom:             initial?.nom             ?? "",
+        filiereId:       fId                      ?? "",
+        niveauAnnee:     initial?.niveauAnnee     ?? "L1",
+        anneeScolaireId: aId                      ?? "",
+        capaciteMax:     initial?.capaciteMax     ?? 30,
+        nbInscrits:      initial?.nbInscrits      ?? 0,
       });
     }
   }, [isOpen, initial]);
 
-  useEffect(() => {
-    if (isOpen && mode === "add" && !form.anneeScolaireId && annees.length > 0) {
-      const active = annees.find((a) => a.actif) ?? annees[0];
-      if (active) {
-        setForm((f) => ({ ...f, anneeScolaireId: String(active.id) }));
-      }
-    }
-  }, [isOpen, mode, form.anneeScolaireId, annees]);
-
   if (!isOpen) return null;
 
-  const canSubmit =
-    form.nom.trim() !== "" &&
-    form.filiereId !== "" &&
-    form.anneeScolaireId !== "" &&
-    (mode === "edit" || form.niveauAnneeId !== "") &&
-    !isSaving;
+  const canSubmit = form.nom.trim() !== "" && form.filiereId !== "" && form.anneeScolaireId !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -246,16 +185,32 @@ function FormModal({
               <select
                 id="groupe-filiere"
                 value={form.filiereId}
-                onChange={(e) => setForm((f) => ({ ...f, filiereId: e.target.value, niveauAnneeId: "" }))}
+                onChange={(e) => setForm((f) => ({ ...f, filiereId: e.target.value ? Number(e.target.value) : "" }))}
                 title="Filière rattachée"
                 className={inputCls}
               >
                 <option value="">Sélectionner une filière</option>
                 {filieres.map((f) => (
-                  <option key={f.id} value={String(f.id)}>
+                  <option key={f.id} value={f.id}>
                     {f.nom} ({f.code})
                   </option>
                 ))}
+              </select>
+            </Field>
+
+            <Field label="Niveau *" htmlFor="groupe-niveau">
+              <select
+                id="groupe-niveau"
+                value={form.niveauAnnee}
+                onChange={(e) => setForm((f) => ({ ...f, niveauAnnee: e.target.value }))}
+                title="Niveau d'étude"
+                className={inputCls}
+              >
+                <option value="L1">L1</option>
+                <option value="L2">L2</option>
+                <option value="L3">L3</option>
+                <option value="M1">M1</option>
+                <option value="M2">M2</option>
               </select>
             </Field>
 
@@ -263,51 +218,18 @@ function FormModal({
               <select
                 id="groupe-annee"
                 value={form.anneeScolaireId}
-                onChange={(e) => setForm((f) => ({ ...f, anneeScolaireId: e.target.value, niveauAnneeId: "" }))}
+                onChange={(e) => setForm((f) => ({ ...f, anneeScolaireId: e.target.value ? Number(e.target.value) : "" }))}
                 title="Année universitaire"
                 className={inputCls}
               >
                 <option value="">Sélectionner une année</option>
                 {annees.map((a) => (
-                  <option key={a.id} value={String(a.id)}>
-                    {a.label}{a.actif ? " (active)" : ""}
+                  <option key={a.id} value={a.id}>
+                    {a.label}
                   </option>
                 ))}
               </select>
             </Field>
-
-            {mode === "add" && (
-              <Field label="Niveau *" htmlFor="groupe-niveau">
-                <select
-                  id="groupe-niveau"
-                  value={form.niveauAnneeId}
-                  onChange={(e) => setForm((f) => ({ ...f, niveauAnneeId: e.target.value }))}
-                  title="Niveau d'étude"
-                  className={inputCls}
-                  disabled={!canFetchNiveaux || niveauxLoading}
-                >
-                  <option value="">
-                    {!form.filiereId || !form.anneeScolaireId
-                      ? "Sélectionnez d'abord filière et année"
-                      : niveauxLoading
-                        ? "Chargement des niveaux…"
-                        : niveauxError
-                          ? "Erreur de chargement"
-                          : niveauxOptions.length === 0
-                            ? "Aucun niveau — recréez l'année scolaire"
-                            : "Sélectionner un niveau"}
-                  </option>
-                  {niveauxOptions.map((n) => (
-                    <option key={n.id} value={String(n.id)}>{n.code}</option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            {mode === "edit" && initial && (
-              <Field label="Niveau" htmlFor="groupe-niveau-readonly">
-                <input id="groupe-niveau-readonly" readOnly value={getNiveauCode(initial as Groupe)} className={inputCls + " bg-muted"} />
-              </Field>
-            )}
 
             <div className="gap-4 grid grid-cols-2">
               <Field label="Capacité max" htmlFor="groupe-capacite">
@@ -467,16 +389,7 @@ function GroupesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Groupe | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { nbInscrits, ...data } = payload;
-      return groupesApi.create({
-        filiereId: Number(data.filiereId),
-        anneeScolaireId: Number(data.anneeScolaireId),
-        niveauAnneeId: Number(data.niveauAnneeId),
-        nom: data.nom,
-        capaciteMax: data.capaciteMax,
-      });
-    },
+    mutationFn: (payload: FormData) => groupesApi.create(payload),
     onSuccess: () => {
       toast.success("Groupe ajouté avec succès !");
       qc.invalidateQueries({ queryKey: ["groupes"] });
@@ -487,8 +400,8 @@ function GroupesPage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, nom, capaciteMax }: { id: Groupe["id"]; nom: string; capaciteMax: number }) =>
-      groupesApi.update(id, { nom, capaciteMax }),
+    mutationFn: ({ id, ...payload }: FormData & { id: Groupe["id"] }) =>
+      groupesApi.update(id, payload),
     onSuccess: () => {
       toast.success("Groupe modifié avec succès !");
       qc.invalidateQueries({ queryKey: ["groupes"] });
@@ -511,10 +424,7 @@ function GroupesPage() {
 
   const openAdd = () => {
     setFormMode("add");
-    const activeAnnee = (annees as any[]).find((a) => a.actif) ?? (annees as any[])[0];
-    setFormInitial(
-      activeAnnee ? ({ anneeScolaireId: activeAnnee.id } as Partial<Groupe>) : undefined,
-    );
+    setFormInitial(undefined);
     setFormOpen(true);
   };
 
@@ -528,7 +438,7 @@ function GroupesPage() {
     if (formMode === "add") {
       add.mutate(data as FormData);
     } else if (data.id !== undefined) {
-      edit.mutate({ id: data.id, nom: data.nom, capaciteMax: data.capaciteMax });
+      edit.mutate({ id: data.id, ...data });
     }
   };
 
@@ -590,7 +500,7 @@ function GroupesPage() {
                   <TD className="font-mono font-medium">{g.nom}</TD>
                   <TD>{getFiliereName(g)}</TD>
                   <TD>
-                    <span className="bg-muted px-2 py-0.5 rounded-md font-medium text-xs">{getNiveauCode(g)}</span>
+                    <span className="bg-muted px-2 py-0.5 rounded-md font-medium text-xs">{g.niveauAnnee}</span>
                   </TD>
                   <TD>{getAnneeLabel(g)}</TD>
                   <TD>{g.capaciteMax}</TD>

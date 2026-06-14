@@ -391,11 +391,7 @@ function DepartementsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Departement | null>(null);
 
   const add = useMutation({
-    mutationFn: (payload: FormData) => {
-      const { nbFilieres, nbEnseignants, ...data } = payload;
-      // Only send nom, code, chefDepartement to the API
-      return departementsApi.create(data);
-    },
+    mutationFn: (payload: FormData) => departementsApi.create(payload),
     onSuccess: () => {
       toast.success("Département ajouté avec succès !");
       qc.invalidateQueries({ queryKey: ["departements"] });
@@ -406,11 +402,8 @@ function DepartementsPage() {
   });
 
   const edit = useMutation({
-    mutationFn: ({ id, ...payload }: FormData & { id: Departement["id"] }) => {
-      const { code, nbFilieres, nbEnseignants, ...data } = payload;
-      // Only send nom, chefDepartement to the API for PUT
-      return departementsApi.update(id, data);
-    },
+    mutationFn: ({ id, ...payload }: FormData & { id: Departement["id"] }) =>
+      departementsApi.update(id, payload),
     onSuccess: () => {
       toast.success("Département modifié avec succès !");
       qc.invalidateQueries({ queryKey: ["departements"] });

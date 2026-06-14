@@ -2,6 +2,7 @@
 // Endpoint shapes follow the published OpenAPI spec.
 
 import { api } from "./client";
+import { API_BASE_URL } from "@/lib/api/client";
 
 // ---------- Auth ----------
 export const authApi = {
@@ -53,52 +54,25 @@ export const anneesApi = {
   create: (data: any) => api<any>(`/annees-scolaires`, { method: "POST", body: data }),
   update: (id: string | number, data: any) => api<any>(`/annees-scolaires/${id}`, { method: "PUT", body: data }),
   remove: (id: string | number) => api<void>(`/annees-scolaires/${id}`, { method: "DELETE" }),
-  /** Calendar semesters for an academic year (10 rows). */
-  listSemestres: (anneeScolaireId: string | number) =>
-    api<any>(`/annees-scolaires/${anneeScolaireId}/semestres`),
-  updateCalendarSemestre: (
-    anneeScolaireId: string | number,
-    calendarSemestreId: string | number,
-    data: { dateDebut?: string; dateFin?: string; actif?: boolean },
-  ) =>
-    api<any>(`/annees-scolaires/${anneeScolaireId}/semestres/${calendarSemestreId}`, {
-      method: "PUT",
-      body: data,
-    }),
 };
 
-// ---------- Niveaux annee ----------
-export const niveauxAnneeApi = {
-  list: (params?: {
-    page?: number;
-    limit?: number;
-    anneeScolaireId?: number;
-    filiereId?: number;
-  }) => api<any>(`/niveaux-annee`, { query: params }),
-  get: (id: string | number) => api<any>(`/niveaux-annee/${id}`),
-};
-
-// ---------- Semestres (catalog, read-only) ----------
+// ---------- Semestres ----------
 export const semestresApi = {
   list: (params?: { page?: number; limit?: number }) =>
     api<any>(`/semestres`, { query: params }),
   get: (id: string | number) => api<any>(`/semestres/${id}`),
+  create: (data: any) => api<any>(`/semestres`, { method: "POST", body: data }),
+  update: (id: string | number, data: any) => api<any>(`/semestres/${id}`, { method: "PUT", body: data }),
+  remove: (id: string | number) => api<void>(`/semestres/${id}`, { method: "DELETE" }),
 };
 
 // ---------- Groupes ----------
 export const groupesApi = {
-  list: (params?: { page?: number; limit?: number; niveauAnneeId?: number }) =>
+  list: (params?: { page?: number; limit?: number }) =>
     api<any>(`/groupes`, { query: params }),
   get: (id: string | number) => api<any>(`/groupes/${id}`),
-  create: (data: {
-    filiereId: number;
-    anneeScolaireId: number;
-    niveauAnneeId: number;
-    nom: string;
-    capaciteMax?: number;
-  }) => api<any>(`/groupes`, { method: "POST", body: data }),
-  update: (id: string | number, data: { nom?: string; capaciteMax?: number }) =>
-    api<any>(`/groupes/${id}`, { method: "PUT", body: data }),
+  create: (data: any) => api<any>(`/groupes`, { method: "POST", body: data }),
+  update: (id: string | number, data: any) => api<any>(`/groupes/${id}`, { method: "PUT", body: data }),
   remove: (id: string | number) => api<void>(`/groupes/${id}`, { method: "DELETE" }),
 };
 
@@ -114,17 +88,10 @@ export const enseignantsApi = {
 
 // ---------- Unites d'enseignement ----------
 export const ueApi = {
-  list: (params?: { page?: number; limit?: number; search?: string; niveauCode?: string }) =>
+  list: (params?: { page?: number; limit?: number; search?: string }) =>
     api<any>(`/unites-enseignement`, { query: params }),
   get: (id: string | number) => api<any>(`/unites-enseignement/${id}`),
-  create: (data: {
-    filiereId: number;
-    niveauCode: string;
-    code: string;
-    intitule: string;
-    creditsEcts: number;
-    typeUe: string;
-  }) => api<any>(`/unites-enseignement`, { method: "POST", body: data }),
+  create: (data: any) => api<any>(`/unites-enseignement`, { method: "POST", body: data }),
   update: (id: string | number, data: any) => api<any>(`/unites-enseignement/${id}`, { method: "PUT", body: data }),
   remove: (id: string | number) => api<void>(`/unites-enseignement/${id}`, { method: "DELETE" }),
 };
@@ -134,110 +101,53 @@ export const matieresApi = {
   list: (params?: { page?: number; limit?: number; search?: string }) =>
     api<any>(`/matieres`, { query: params }),
   get: (id: string | number) => api<any>(`/matieres/${id}`),
-  create: (data: {
-    ueId: number;
-    anneeScolaireSemestreId: number;
-    code: string;
-    intitule: string;
-    coefficient: number;
-    volumeHoraire: number;
-    description?: string;
-  }) => api<any>(`/matieres`, { method: "POST", body: data }),
+  create: (data: any) => api<any>(`/matieres`, { method: "POST", body: data }),
   update: (id: string | number, data: any) => api<any>(`/matieres/${id}`, { method: "PUT", body: data }),
   remove: (id: string | number) => api<void>(`/matieres/${id}`, { method: "DELETE" }),
 };
 
 // ---------- Inscriptions ----------
 export const inscriptionsApi = {
-  list: (params?: { page?: number; limit?: number }) => api<any>(`/inscriptions`, { query: params }),
-  get: (id: string | number) => api<any>(`/inscriptions/${id}`),
-  byGroup: (groupeId: string | number) => api<any>(`/inscriptions/group/${groupeId}`),
-  create: (data: {
-    etudiantId: number;
-    groupeId: number;
-    niveauAnneeId: number;
-    anneeScolaireId: number;
-    estRedoublant?: boolean;
-    numeroBordereau?: string;
-    montantPaye?: string | number;
-  }) => api<any>(`/inscriptions`, { method: "POST", body: data }),
-  update: (id: string | number, data: any) => api<any>(`/inscriptions/${id}`, { method: "PUT", body: data }),
-  remove: (id: string | number) => api<void>(`/inscriptions/${id}`, { method: "DELETE" }),
-  semesterResult: (inscriptionId: string | number, anneeScolaireSemestreId: string | number) =>
-    api<any>(`/inscriptions/${inscriptionId}/result/semester/${anneeScolaireSemestreId}`, { method: "POST" }),
+  list: (params?: { page?: number; limit?: number }) => api<any>(`${API_BASE_URL}/inscriptions`, { query: params }),
+  get: (id: string | number) => api<any>(`${API_BASE_URL}/inscriptions/${id}`),
+  byGroup: (groupeId: string | number) => api<any>(`${API_BASE_URL}/inscriptions/group/${groupeId}`),
+  create: (data: any) => api<any>(`${API_BASE_URL}/inscriptions`, { method: "POST", body: data }),
+  update: (id: string | number, data: any) => api<any>(`${API_BASE_URL}/inscriptions/${id}`, { method: "PUT", body: data }),
+  remove: (id: string | number) => api<void>(`${API_BASE_URL}/inscriptions/${id}`, { method: "DELETE" }),
+  semesterResult: (inscriptionId: string | number, semestreId: string | number) =>
+    api<any>(`${API_BASE_URL}/inscriptions/${inscriptionId}/result/semester/${semestreId}`, { method: "POST" }),
   annualResult: (inscriptionId: string | number, anneeId: string | number) =>
-    api<any>(`/inscriptions/${inscriptionId}/result/annual/${anneeId}`, { method: "POST" }),
+    api<any>(`${API_BASE_URL}/inscriptions/${inscriptionId}/result/annual/${anneeId}`, { method: "POST" }),
 };
 
 // ---------- Notes ----------
 export const notesApi = {
-  create: (data: {
-    inscriptionId: number;
-    matiereId: number;
-    anneeScolaireSemestreId: number;
-    noteNormale?: number | null;
-    noteRattrapage?: number | null;
-    absenceInjustifiee?: boolean;
-  }) => api<any>(`/notes`, { method: "POST", body: data }),
-  forSemester: (inscriptionId: string | number, anneeScolaireSemestreId: string | number) =>
-    api<any>(`/notes/inscription/${inscriptionId}/semester/${anneeScolaireSemestreId}`),
-  update: (id: string | number, data: any) => api<any>(`/notes/${id}`, { method: "PUT", body: data }),
-  remove: (id: string | number) => api<void>(`/notes/${id}`, { method: "DELETE" }),
-  bulkUpsert: (data: {
-    anneeScolaireSemestreId: number;
-    notes: Array<{
-      inscriptionId: number;
-      matiereId: number;
-      noteNormale?: number | null;
-      noteRattrapage?: number | null;
-      absenceInjustifiee?: boolean;
-    }>;
-  }) => api<any>(`/notes/bulk-upsert`, { method: "POST", body: data }),
+  create: (data: any) => api<any>(`${API_BASE_URL}/notes`, { method: "POST", body: data }),
+  forSemester: (inscriptionId: string | number, semestreId: string | number) =>
+    api<any>(`${API_BASE_URL}/notes/inscription/${inscriptionId}/semester/${semestreId}`),
+  update: (id: string | number, data: any) => api<any>(`${API_BASE_URL}/notes/${id}`, { method: "PUT", body: data }),
+  remove: (id: string | number) => api<void>(`${API_BASE_URL}/notes/${id}`, { method: "DELETE" }),
+  bulkUpsert: (data: any) => api<any>(`${API_BASE_URL}/notes/bulk-upsert`, { method: "POST", body: data }),
 };
 
 // ---------- Presences ----------
 export const presencesApi = {
-  list: (params?: { anneeScolaireSemestreId?: number; page?: number; limit?: number }) =>
-    api<any>(`/feuilles-presence`, { query: params }),
-  createSheet: (data: {
-    affectationCoursId: number;
-    anneeScolaireSemestreId: number;
-    dateSeance: string;
-    titreSeance?: string;
-  }) => api<any>(`/feuilles-presence`, { method: "POST", body: data }),
-  bulk: (data: any) => api<any>(`/feuilles-presence/bulk-presence`, { method: "POST", body: data }),
-  forSheet: (feuilleId: string | number) => api<any>(`/feuilles-presence/${feuilleId}/presences`),
+  createSheet: (data: any) => api<any>(`${API_BASE_URL}/feuilles-presence`, { method: "POST", body: data }),
+  bulk: (data: any) => api<any>(`${API_BASE_URL}/feuilles-presence/bulk-presence`, { method: "POST", body: data }),
+  forSheet: (feuilleId: string | number) => api<any>(`${API_BASE_URL}/feuilles-presence/${feuilleId}/presences`),
 };
 
 // ---------- Stages ----------
 export const stagesApi = {
-  list: () => api<any>(`/stages`),
-  get: (id: string | number) => api<any>(`/stages/${id}`),
-  create: (data: any) => api<any>(`/stages`, { method: "POST", body: data }),
-  update: (id: string | number, data: any) => api<any>(`/stages/${id}`, { method: "PUT", body: data }),
-  remove: (id: string | number) => api<void>(`/stages/${id}`, { method: "DELETE" }),
+  list: () => api<any>(`${API_BASE_URL}/stages`),
+  get: (id: string | number) => api<any>(`${API_BASE_URL}/stages/${id}`),
+  create: (data: any) => api<any>(`${API_BASE_URL}/stages`, { method: "POST", body: data }),
+  update: (id: string | number, data: any) => api<any>(`${API_BASE_URL}/stages/${id}`, { method: "PUT", body: data }),
+  remove: (id: string | number) => api<void>(`${API_BASE_URL}/stages/${id}`, { method: "DELETE" }),
 };
 
-// ---------- Reports ----------
+// ---------- Bulletin ----------
 export const reportsApi = {
-  bulletinSemestre: (inscriptionId: string | number, anneeScolaireSemestreId: string | number) =>
-    api<any>(`/reports/bulletin-semestre/${inscriptionId}/${anneeScolaireSemestreId}`),
-  bulletinAnnuel: (inscriptionId: string | number, anneeScolaireId: string | number) =>
-    api<any>(`/reports/bulletin-annuel/${inscriptionId}/${anneeScolaireId}`),
-  /** @deprecated use bulletinSemestre */
-  bulletin: (inscriptionId: string | number, anneeScolaireSemestreId: string | number) =>
-    api<any>(`/reports/bulletin-semestre/${inscriptionId}/${anneeScolaireSemestreId}`),
-};
-
-export const affectationsApi = {
-  list: (params?: { page?: number; limit?: number; anneeScolaireSemestreId?: number }) =>
-    api<any>(`/affectations-cours`, { query: params }),
-  get: (id: string | number) => api<any>(`/affectations-cours/${id}`),
-  create: (data: {
-    matiereId: number;
-    enseignantId: number;
-    groupeId: number;
-    anneeScolaireSemestreId: number;
-  }) => api<any>(`/affectations-cours`, { method: "POST", body: data }),
-  remove: (id: string | number) => api<void>(`/affectations-cours/${id}`, { method: "DELETE" }),
+  bulletin: (inscriptionId: string | number, semestreId: string | number) =>
+    api<any>(`${API_BASE_URL}/reports/bulletin-semestre/${inscriptionId}/${semestreId}`),
 };
