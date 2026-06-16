@@ -382,7 +382,14 @@ function FilieresPage() {
       refetch();
       setFormOpen(false);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur lors de l'ajout"),
+    onError: (e: any) => {
+      const message = e?.message || 
+                      (e?.body as any)?.message || 
+                      (e?.body as any)?.error || 
+                      "Erreur lors de l'ajout";
+      console.error("[v0] Add filiere error:", e);
+      toast.error(message);
+    },
   });
 
   const edit = useMutation({
@@ -397,7 +404,14 @@ function FilieresPage() {
       refetch();
       setFormOpen(false);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur lors de la modification"),
+    onError: (e: any) => {
+      const message = e?.message || 
+                      (e?.body as any)?.message || 
+                      (e?.body as any)?.error || 
+                      "Erreur lors de la modification";
+      console.error("[v0] Edit filiere error:", e);
+      toast.error(message);
+    },
   });
 
   const del = useMutation({
@@ -408,7 +422,14 @@ function FilieresPage() {
       refetch();
       setDeleteTarget(null);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Suppression impossible"),
+    onError: (e: any) => {
+      const message = e?.message || 
+                      (e?.body as any)?.message || 
+                      (e?.body as any)?.error || 
+                      "Suppression impossible";
+      console.error("[v0] Delete filiere error:", e);
+      toast.error(message);
+    },
   });
 
   const openAdd = () => {
