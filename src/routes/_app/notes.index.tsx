@@ -188,7 +188,7 @@ function NotesIndexPage() {
           <option value="">Toutes les inscriptions</option>
           {(inscriptions as any[]).map((ins) => (
             <option key={ins.id} value={ins.id}>
-              {[ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" ") || `#${ins.id}`} ({ins.etudiant?.matricule ?? ins.matricule ?? ""})
+              {[ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" ") || `Matricule: ${ins.etudiant?.matricule ?? ins.matricule ?? "N/A"}`} ({ins.etudiant?.matricule ?? ins.matricule ?? ""})
             </option>
           ))}
         </SelectInput>
@@ -203,7 +203,7 @@ function NotesIndexPage() {
       </FilterBar>
       <DataTable>
         <table ref={tableRef} style={{ width: "100%" }}>
-        <THead><TR><TH>#</TH><TH>Étudiant</TH><TH>Matière</TH><TH>Semestre</TH><TH>Normale</TH><TH>Rattrapage</TH><TH>Finale</TH><TH>Abs. inj.</TH></TR></THead>
+        <THead><TR><TH>Matricule</TH><TH>Étudiant</TH><TH>Matière</TH><TH>Semestre</TH><TH>Normale</TH><TH>Rattrapage</TH><TH>Finale</TH><TH>Abs. inj.</TH></TR></THead>
         <tbody>
           {loading ? (
             <TR><TD colSpan={8} className="py-8 text-muted-foreground text-center">Chargement…</TD></TR>
@@ -221,8 +221,8 @@ function NotesIndexPage() {
             const finale = n.absenceInjustifiee ? 0 : (n.noteFinal != null ? Number(n.noteFinal) : (noteRattrapage ?? noteNormale ?? 0));
             return (
               <TR key={n.id ?? i}>
-                <TD className="text-muted-foreground">{i + 1}</TD>
-                <TD className="font-medium">{n.etudiantNom ?? `Inscription #${n.inscriptionId}`}</TD>
+                <TD className="text-muted-foreground">{n.matricule || `—`}</TD>
+                <TD className="font-medium">{n.etudiantNom ?? `Matricule: ${n.matricule || "N/A"}`}</TD>
                 <TD>{n.matiere?.intitule ?? n.matiere?.code ?? `Matière #${n.matiereId}`}</TD>
                 <TD>{n.anneeScolaireSemestre?.semestre?.code ?? n.anneeScolaireSemestre?.semestre?.numero ?? `Sem #${n.anneeScolaireSemestreId}`}</TD>
                 <TD>{noteNormale != null ? noteNormale.toFixed(2) : "—"}</TD>
