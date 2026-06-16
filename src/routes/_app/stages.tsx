@@ -6,6 +6,7 @@ import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { stagesApi, inscriptionsApi, anneesApi, enseignantsApi } from "@/lib/api/endpoints";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useApiList } from "@/lib/api/use-api-list";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 
@@ -341,37 +342,29 @@ export const Route = createFileRoute("/_app/stages")({
 function StagesPage() {
   const qc = useQueryClient();
 
-  const { data: stagesData, isLoading, isError, refetch } = useQuery({
-    queryKey: ["stages"],
-    queryFn: async () => {
-      const res = await stagesApi.list() as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
+  const { data: stagesData, isLoading, isFallback, error, refetch } = useApiList(
+    ["stages"],
+    () => stagesApi.list(),
+    [],
+  );
 
-  const { data: inscriptions = [] } = useQuery({
-    queryKey: ["inscriptions-all"],
-    queryFn: async () => {
-      const res = await inscriptionsApi.list({ limit: 1000 }) as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
+  const { data: inscriptions = [] } = useApiList(
+    ["inscriptions-all"],
+    () => inscriptionsApi.list({ limit: 1000 }),
+    [],
+  );
 
-  const { data: annees = [] } = useQuery({
-    queryKey: ["annees-all"],
-    queryFn: async () => {
-      const res = await anneesApi.list({ limit: 100 }) as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
+  const { data: annees = [] } = useApiList(
+    ["annees-all"],
+    () => anneesApi.list({ limit: 100 }),
+    [],
+  );
 
-  const { data: enseignants = [] } = useQuery({
-    queryKey: ["enseignants-all"],
-    queryFn: async () => {
-      const res = await enseignantsApi.list({ limit: 500 }) as any;
-      return res?.data?.data ?? res?.data ?? [];
-    },
-  });
+  const { data: enseignants = [] } = useApiList(
+    ["enseignants-all"],
+    () => enseignantsApi.list({ limit: 500 }),
+    [],
+  );
 
   const stages = (stagesData || []) as Stage[];
 
@@ -433,6 +426,22 @@ function StagesPage() {
     }
   };
 
+  // If there's an error fetching stages and no data, show error page
+  if (error && stagesData.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
+        <h1 className="text-2xl font-bold">Erreur de chargement</h1>
+        <p className="text-gray-600">Impossible de charger les stages.</p>
+        <button
+          onClick={() => refetch()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
       <div>
@@ -446,7 +455,7 @@ function StagesPage() {
           }
         />
 
-        <ApiStatusBanner show={isError} />
+        <ApiStatusBanner show={!!error} />
 
         <DataTable>
           <THead>
