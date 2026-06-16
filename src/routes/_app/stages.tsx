@@ -486,9 +486,9 @@ function StagesPage() {
               const anneeStr = ann ? ann.annee : `Année #${s.anneeScolaireId}`;
               const ensStr = ens ? `${ens.nom} ${ens.prenom}` : s.enseignantId ? `Ens #${s.enseignantId}` : "—";
               
-              const noteEnc = s.noteEncadrant != null ? s.noteEncadrant : null;
-              const noteSout = s.noteSoutenance != null ? s.noteSoutenance : null;
-              const moyPratique = (noteEnc != null && noteSout != null) ? (noteEnc + noteSout) / 2 : null;
+              const noteEnc = s.noteEncadrant != null ? Number(s.noteEncadrant) : null;
+              const noteSout = s.noteSoutenance != null ? Number(s.noteSoutenance) : null;
+              const moyPratique = (noteEnc != null && noteSout != null && !isNaN(noteEnc) && !isNaN(noteSout)) ? (noteEnc + noteSout) / 2 : null;
 
               return (
                 <TR key={s.id}>
@@ -498,9 +498,9 @@ function StagesPage() {
                   <TD>{s.entreprise || "—"}</TD>
                   <TD className="max-w-xs text-muted-foreground truncate" title={s.sujet || undefined}>{s.sujet || "—"}</TD>
                   <TD>{ensStr}</TD>
-                  <TD>{noteEnc != null ? noteEnc.toFixed(2) : "—"}</TD>
-                  <TD>{noteSout != null ? noteSout.toFixed(2) : "—"}</TD>
-                  <TD className="font-bold text-primary">{moyPratique != null ? moyPratique.toFixed(2) : "—"}</TD>
+                  <TD>{noteEnc != null && !isNaN(noteEnc) ? noteEnc.toFixed(2) : "—"}</TD>
+                  <TD>{noteSout != null && !isNaN(noteSout) ? noteSout.toFixed(2) : "—"}</TD>
+                  <TD className="font-bold text-primary">{moyPratique != null && !isNaN(moyPratique) ? moyPratique.toFixed(2) : "—"}</TD>
                   <TD className="text-muted-foreground">{s.dateSoutenance ? s.dateSoutenance.slice(0, 10) : "—"}</TD>
                   <TD>
                     <div className="flex justify-end gap-1">
