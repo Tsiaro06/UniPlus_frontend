@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Eye, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Plus, Eye, X, Printer } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
@@ -270,6 +270,7 @@ function PresencesPage() {
 
 function SaisiePresence({ seance, onClose }: { seance: any; onClose: () => void }) {
   const [rows, setRows] = useState<EtudiantPresenceRow[]>([]);
+  const printRef = useRef<HTMLDivElement>(null);
 
   const { data: inscriptions = [] } = useQuery({
     queryKey: ["inscriptions-by-group", seance?.affectationCours?.groupeId],
@@ -327,6 +328,22 @@ function SaisiePresence({ seance, onClose }: { seance: any; onClose: () => void 
 
   const count = (s: StatutPresence) => rows.filter((r) => r.statut === s).length;
 
+  const handlePrint = () => {
+    if (printRef.current) {
+      const printWindow = window.open("", "", "height=auto,width=auto");
+      if (printWindow) {
+        printWindow.document.write(printRef.current.innerHTML);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
+  };
+
   const styles: Record<StatutPresence, string> = {
     present: "bg-emerald-100 text-emerald-700",
     absent: "bg-red-100 text-red-700",
@@ -344,6 +361,9 @@ function SaisiePresence({ seance, onClose }: { seance: any; onClose: () => void 
           <div className="flex gap-2 ml-auto">
             <Button variant="secondary" size="sm" onClick={() => setRows(p => p.map(r => ({ ...r, statut: "present" })))}>Tous présents</Button>
             <Button variant="secondary" size="sm" onClick={() => setRows(p => p.map(r => ({ ...r, statut: "absent" })))}>Tous absents</Button>
+            <Button variant="secondary" size="sm" onClick={handlePrint} title="Imprimer la liste de présence">
+              <Printer className="w-4 h-4" /> Imprimer
+            </Button>
             <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
               {save.isPending ? "Enregistrement…" : "Enregistrer"}
             </Button>
@@ -396,6 +416,55 @@ function SaisiePresence({ seance, onClose }: { seance: any; onClose: () => void 
           ))}
         </tbody>
       </DataTable>
+
+      {/* Hidden print template */}
+      <div ref={printRef} style={{ display: "none" }}>
+        <style>{`
+          body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+          .print-header { text-align: center; margin-bottom: 30px; }
+          .print-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
+          .print-info { font-size: 12px; color: #666; margin-bottom: 5px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 11px; }
+          th { background-color: #f0f0f0; font-weight: bold; }
+          .signature-cell { height: 60px; vertical-align: bottom; }
+          .justification-cell { width: 30%; }
+          tr { page-break-inside: avoid; }
+        `}</style>
+        <div className="print-header">
+          <div className="print-title">
+            Liste de présence pour {seance?.affectationCours?.matiere?.intitule || seance?.titreSeance || "—"}
+          </div>
+          <div className="print-info">
+            Groupe: {seance?.affectationCours?.groupe?.nom || "—"}
+          </div>
+          <div className="print-info">
+            Date: {formatDate(seance?.dateSeance || new Date().toISOString())}
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: "15%" }}>Matricule</th>
+              <th style={{ width: "15%" }}>Nom</th>
+              <th style={{ width: "15%" }}>Prénom</th>
+              <th style={{ width: "20%" }}>Signature</th>
+              <th className="justification-cell">Justification</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.id}>
+                <td>{r.matricule}</td>
+                <td>{r.nom}</td>
+                <td>{r.prenom}</td>
+                <td className="signature-cell"></td>
+                <td className="justification-cell"></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
