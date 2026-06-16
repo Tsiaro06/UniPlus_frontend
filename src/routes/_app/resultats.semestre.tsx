@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calculator } from "lucide-react";
+import { Calculator, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
@@ -9,7 +9,7 @@ import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { useApiList } from "@/lib/api/use-api-list";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { inscriptionsApi, groupesApi, anneesApi, reportsApi } from "@/lib/api/endpoints";
 import type { AnneeScolaireSemestre } from "@/lib/lmd";
 
@@ -44,6 +44,7 @@ export const Route = createFileRoute("/_app/resultats/semestre")({
 function ResultatsSemestrePage() {
   const [selectedGroupeId, setSelectedGroupeId] = useState("");
   const [selectedCalendarSemestreId, setSelectedCalendarSemestreId] = useState("");
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const { data: inscriptions, isFallback, refetch } = useApiList(
     ["inscriptions"],
@@ -156,16 +157,57 @@ function ResultatsSemestrePage() {
     onError: (e: any) => toast.error(e?.message ?? "Erreur lors du calcul global"),
   });
 
+  const handlePrint = () => {
+    if (!tableRef.current) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    
+    const tableClone = tableRef.current.cloneNode(true) as HTMLElement;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Résultats semestre</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .text-muted-foreground { color: #666; }
+            .font-mono { font-family: monospace; }
+            .font-medium { font-weight: 500; }
+            .text-emerald-600 { color: #059669; }
+            .text-danger { color: #dc2626; }
+          </style>
+        </head>
+        <body>
+          <h2>Résultats semestre - ${rows.length} inscriptions</h2>
+          ${tableClone.innerHTML}
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   return (
     <div>
       <PageHeader
         title="Résultats semestre"
         subtitle={`${rows.length} inscriptions`}
         actions={
-          <Button onClick={() => calculerTout.mutate()} disabled={calculerTout.isPending || !selectedCalendarSemestreId}>
-            <Calculator className="w-4 h-4" />
-            {calculerTout.isPending ? "Calcul en cours..." : "Tout calculer"}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handlePrint} variant="secondary">
+              <Printer className="w-4 h-4" />
+              Imprimer
+            </Button>
+            <Button onClick={() => calculerTout.mutate()} disabled={calculerTout.isPending || !selectedCalendarSemestreId}>
+              <Calculator className="w-4 h-4" />
+              {calculerTout.isPending ? "Calcul en cours..." : "Tout calculer"}
+            </Button>
+          </div>
         }
       />
 
@@ -189,19 +231,20 @@ function ResultatsSemestrePage() {
         </SelectInput>
       </FilterBar>
 
-      <DataTable>
-        <THead>
-          <TR>
-            <TH>#</TH>
-            <TH>Matricule</TH>
-            <TH>Étudiant</TH>
-            <TH>Groupe</TH>
-            <TH>Semestre</TH>
-            <TH>Moy. théorique</TH>
-            <TH>Décision</TH>
-            <TH className="text-right">Actions</TH>
-          </TR>
-        </THead>
+      <div ref={tableRef}>
+        <DataTable>
+          <THead>
+            <TR>
+              <TH>#</TH>
+              <TH>Matricule</TH>
+              <TH>Étudiant</TH>
+              <TH>Groupe</TH>
+              <TH>Semestre</TH>
+              <TH>Moy. théorique</TH>
+              <TH>Décision</TH>
+              <TH className="text-right">Actions</TH>
+            </TR>
+          </THead>
         <tbody>
           {rows.map((r) => (
             <TR key={r.id}>
@@ -225,7 +268,8 @@ function ResultatsSemestrePage() {
             </TR>
           ))}
         </tbody>
-      </DataTable>
+        </DataTable>
+      </div>
     </div>
   );
 }

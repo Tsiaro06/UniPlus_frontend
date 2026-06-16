@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calculator } from "lucide-react";
+import { Calculator, Printer } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
@@ -9,7 +9,7 @@ import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { useApiList } from "@/lib/api/use-api-list";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { inscriptionsApi, groupesApi, anneesApi, reportsApi } from "@/lib/api/endpoints";
 
 interface ResultatAnnuel {
@@ -21,6 +21,23 @@ interface ResultatAnnuel {
   moyennePratique: number;
   moyenneFinal: number;
   decision: string;
+  inscriptionId: number | string;
+}
+
+interface BulletinAnnuelData {
+  etudiant: {
+    matricule: string;
+    nom: string;
+    prenom: string;
+  };
+  filiere: string;
+  groupe: string;
+  niveauCode: string;
+  anneeScolaire: string;
+  theoriqueAverage: number;
+  practicalAverage: number | null;
+  finalAverage: number;
+  decision: string;
 }
 
 export const Route = createFileRoute("/_app/resultats/annuel")({
@@ -31,6 +48,7 @@ export const Route = createFileRoute("/_app/resultats/annuel")({
 function ResultatsAnnuelPage() {
   const [selectedGroupeId, setSelectedGroupeId] = useState("");
   const [selectedAnneeId, setSelectedAnneeId] = useState("");
+  const tableRef = useRef<HTMLDivElement>(null);
 
   const { data: inscriptions, isFallback, refetch } = useApiList(
     ["inscriptions"],
@@ -53,22 +71,52 @@ function ResultatsAnnuelPage() {
     },
   });
 
-  const rows: ResultatAnnuel[] = (inscriptions as any[])
-    .filter((ins) => {
-      if (selectedGroupeId && String(ins.groupeId ?? ins.groupe?.id) !== selectedGroupeId) return false;
-      if (selectedAnneeId && String(ins.anneeScolaireId ?? ins.anneeScolaire?.id) !== selectedAnneeId) return false;
-      return true;
-    })
-    .map((ins) => ({
-      id: ins.id,
-      matricule: ins.etudiant?.matricule ?? "",
-      etudiant: [ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" "),
-      groupe: ins.groupe?.nom ?? "",
-      moyenneTheorique: ins.moyenneTheorique ?? 0,
-      moyennePratique: ins.moyennePratique ?? 0,
-      moyenneFinal: ins.moyenneFinale ?? 0,
-      decision: ins.statusAnnee ?? ins.statut ?? "en_attente",
-    }));
+  const filteredInscriptions = (inscriptions as any[]).filter((ins) => {
+    if (selectedGroupeId && String(ins.groupeId ?? ins.groupe?.id) !== selectedGroupeId) return false;
+    if (selectedAnneeId && String(ins.anneeScolaireId ?? ins.anneeScolaire?.id) !== selectedAnneeId) return false;
+    return true;
+  });
+
+  const { data: bulletins = {} } = useQuery({
+    queryKey: ["bulletins-annuel", selectedAnneeId, filteredInscriptions.map(i => i.id).join(",")],
+    queryFn: async () => {
+      const anneeId = selectedAnneeId || (annees as any[]).find((a) => a.actif)?.id;
+      if (!anneeId || filteredInscriptions.length === 0) return {};
+      
+      const bulletinData: Record<string, BulletinAnnuelData> = {};
+      
+      for (const ins of filteredInscriptions) {
+        try {
+          const result = await reportsApi.bulletinAnnuel(ins.id, anneeId) as any;
+          bulletinData[ins.id] = result?.data ?? result;
+        } catch (error) {
+          console.error(`[v0] Error fetching bulletin annuel for inscription ${ins.id}:`, error);
+        }
+      }
+      
+      return bulletinData;
+    },
+    enabled: filteredInscriptions.length > 0,
+  });
+
+  const rows: ResultatAnnuel[] = filteredInscriptions
+    .map((ins) => {
+      const bulletin = bulletins[ins.id] as BulletinAnnuelData | undefined;
+      
+      return {
+        id: ins.id,
+        inscriptionId: ins.id,
+        matricule: bulletin?.etudiant?.matricule ?? ins.etudiant?.matricule ?? "",
+        etudiant: bulletin 
+          ? [bulletin.etudiant?.prenom, bulletin.etudiant?.nom].filter(Boolean).join(" ")
+          : [ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" "),
+        groupe: bulletin?.groupe ?? ins.groupe?.nom ?? "",
+        moyenneTheorique: bulletin?.theoriqueAverage ?? ins.moyenneTheorique ?? 0,
+        moyennePratique: bulletin?.practicalAverage ?? ins.moyennePratique ?? 0,
+        moyenneFinal: bulletin?.finalAverage ?? ins.moyenneFinale ?? 0,
+        decision: bulletin?.decision ?? ins.statusAnnee ?? ins.statut ?? "en_attente",
+      };
+    });
 
   const c = (decision: string) => rows.filter((r) => r.decision === decision).length;
 
@@ -79,6 +127,41 @@ function ResultatsAnnuelPage() {
     { label: "Jury", value: c("jury"), color: "bg-amber-100 text-amber-700" },
     { label: "En attente", value: c("en_attente"), color: "bg-slate-100 text-slate-700" },
   ];
+
+  const handlePrint = () => {
+    if (!tableRef.current) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    
+    const tableClone = tableRef.current.cloneNode(true) as HTMLElement;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Résultats annuels</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            th { background-color: #f2f2f2; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .text-muted-foreground { color: #666; }
+            .font-mono { font-family: monospace; }
+            .font-medium { font-weight: 500; }
+            .text-emerald-600 { color: #059669; }
+            .text-danger { color: #dc2626; }
+          </style>
+        </head>
+        <body>
+          <h2>Résultats annuels - ${rows.length} inscriptions</h2>
+          ${tableClone.innerHTML}
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
 
   const calculerUn = useMutation({
     mutationFn: async (inscriptionId: number | string) => {
@@ -116,10 +199,16 @@ function ResultatsAnnuelPage() {
         title="Résultats annuels"
         subtitle={`${rows.length} inscriptions`}
         actions={
-          <Button onClick={() => calculerTout.mutate()} disabled={calculerTout.isPending}>
-            <Calculator className="w-4 h-4" />
-            {calculerTout.isPending ? "Calcul en cours..." : "Tout calculer"}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handlePrint} variant="secondary">
+              <Printer className="w-4 h-4" />
+              Imprimer
+            </Button>
+            <Button onClick={() => calculerTout.mutate()} disabled={calculerTout.isPending}>
+              <Calculator className="w-4 h-4" />
+              {calculerTout.isPending ? "Calcul en cours..." : "Tout calculer"}
+            </Button>
+          </div>
         }
       />
 
@@ -152,20 +241,21 @@ function ResultatsAnnuelPage() {
         </SelectInput>
       </FilterBar>
 
-      <DataTable>
-        <THead>
-          <TR>
-            <TH>#</TH>
-            <TH>Matricule</TH>
-            <TH>Étudiant</TH>
-            <TH>Groupe</TH>
-            <TH>Moy. théorique</TH>
-            <TH>Moy. pratique</TH>
-            <TH>Moy. finale</TH>
-            <TH>Décision</TH>
-            <TH className="text-right">Actions</TH>
-          </TR>
-        </THead>
+      <div ref={tableRef}>
+        <DataTable>
+          <THead>
+            <TR>
+              <TH>#</TH>
+              <TH>Matricule</TH>
+              <TH>Étudiant</TH>
+              <TH>Groupe</TH>
+              <TH>Moy. théorique</TH>
+              <TH>Moy. pratique</TH>
+              <TH>Moy. finale</TH>
+              <TH>Décision</TH>
+              <TH className="text-right">Actions</TH>
+            </TR>
+          </THead>
         <tbody>
           {rows.map((r) => (
             <TR key={r.id}>
@@ -190,7 +280,8 @@ function ResultatsAnnuelPage() {
             </TR>
           ))}
         </tbody>
-      </DataTable>
+        </DataTable>
+      </div>
     </div>
   );
 }
