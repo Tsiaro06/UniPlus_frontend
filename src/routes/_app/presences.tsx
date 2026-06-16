@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Eye, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Plus, Eye, X, Printer } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { FilterBar, SelectInput } from "@/components/ui/filter-bar";
 import { DataTable, THead, TH, TR, TD, ActionButton } from "@/components/ui/data-table";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
-import { presencesApi, affectationsApi, anneesApi, inscriptionsApi } from "@/lib/api/endpoints";
+import { presencesApi, affectationsApi, anneesApi, inscriptionsApi, groupesApi } from "@/lib/api/endpoints";
 import type { AnneeScolaireSemestre } from "@/lib/lmd";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -140,10 +140,11 @@ export const Route = createFileRoute("/_app/presences")({
 });
 
 function PresencesPage() {
-  const [view, setView] = useState<"list" | "saisie">("list");
+  const [view, setView] = useState<"list" | "saisie" | "students">("list");
   const [showNewModal, setShowNewModal] = useState(false);
   const [currentSeance, setCurrentSeance] = useState<any>(null);
   const [filterCalendarSemestreId, setFilterCalendarSemestreId] = useState("");
+  const [filterGroupeId, setFilterGroupeId] = useState("");
 
   const { data: annees = [] } = useQuery({
     queryKey: ["annees-scolaires"],
@@ -173,6 +174,14 @@ function PresencesPage() {
     },
   });
 
+  const { data: groupes = [] } = useQuery({
+    queryKey: ["groupes"],
+    queryFn: async () => {
+      const res = await groupesApi.list({ limit: 500 }) as any;
+      return res?.data?.data ?? res?.data ?? [];
+    },
+  });
+
   const { data: feuilles = [], isLoading, refetch, isError } = useQuery({
     queryKey: ["feuilles-presence", filterCalendarSemestreId],
     queryFn: async () => {
@@ -194,12 +203,17 @@ function PresencesPage() {
       <div>
         <PageHeader
           title="Feuilles de présence"
-          subtitle={view === "list" ? `${feuilles.length} feuilles` : "Saisie de présence"}
+          subtitle={view === "list" ? `${feuilles.length} feuilles` : view === "students" ? "Liste des étudiants" : "Saisie de présence"}
           actions={
             view === "list" ? (
-              <Button onClick={openNewSeance}>
-                <Plus className="w-4 h-4" /> Nouvelle séance
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setView("students")}>
+                  Liste des étudiants
+                </Button>
+                <Button onClick={openNewSeance}>
+                  <Plus className="w-4 h-4" /> Nouvelle séance
+                </Button>
+              </div>
             ) : (
               <Button variant="secondary" onClick={() => setView("list")}>Retour à la liste</Button>
             )
@@ -252,6 +266,8 @@ function PresencesPage() {
               </tbody>
             </DataTable>
           </>
+        ) : view === "students" ? (
+          <StudentListView groupes={groupes} filterGroupeId={filterGroupeId} setFilterGroupeId={setFilterGroupeId} />
         ) : (
           <SaisiePresence seance={currentSeance} onClose={() => setView("list")} />
         )}
@@ -264,6 +280,132 @@ function PresencesPage() {
         calendarSemestres={calendarSemestres}
         onCreated={() => refetch()}
       />
+    </>
+  );
+}
+
+function StudentListView({
+  groupes,
+  filterGroupeId,
+  setFilterGroupeId,
+}: {
+  groupes: any[];
+  filterGroupeId: string;
+  setFilterGroupeId: (id: string) => void;
+}) {
+  const [students, setStudents] = useState<any[]>([]);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const { data: inscriptions = [], isLoading: loadingInscriptions } = useQuery({
+    queryKey: ["inscriptions-by-group", filterGroupeId],
+    queryFn: async () => {
+      if (!filterGroupeId) return [];
+      const res = await inscriptionsApi.byGroup(filterGroupeId) as any;
+      const list = res?.data?.data ?? res?.data ?? res ?? [];
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: !!filterGroupeId,
+  });
+
+  useEffect(() => {
+    if (inscriptions.length > 0) {
+      const studentList = inscriptions.map((ins: any, idx: number) => ({
+        id: ins.id,
+        index: idx + 1,
+        matricule: ins.etudiant?.matricule ?? ins.matricule ?? "—",
+        nom: ins.etudiant?.nom ?? "—",
+        prenom: ins.etudiant?.prenom ?? "—",
+        signature: "", // Signature field will be left blank for writing
+      }));
+      setStudents(studentList);
+    }
+  }, [inscriptions]);
+
+  const handlePrint = () => {
+    if (printRef.current) {
+      const printWindow = window.open("", "", "height=800,width=1000");
+      if (printWindow) {
+        printWindow.document.write("<html><head><title>Liste des étudiants</title>");
+        printWindow.document.write(`
+          <style>
+            * { margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { text-align: center; font-size: 20px; margin-bottom: 10px; }
+            .groupe-info { text-align: center; margin-bottom: 20px; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+            th { background-color: #f0f0f0; font-weight: bold; }
+            .signature-cell { height: 60px; }
+            .page-break { page-break-after: always; }
+          </style>
+        `);
+        printWindow.document.write("</head><body>");
+        printWindow.document.write(printRef.current.innerHTML);
+        printWindow.document.write("</body></html>");
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
+  return (
+    <>
+      <FilterBar>
+        <SelectInput title="Filtrer par groupe" value={filterGroupeId} onChange={setFilterGroupeId}>
+          <option value="">Sélectionner un groupe</option>
+          {groupes.map((g) => (
+            <option key={g.id} value={String(g.id)}>
+              {g.nom}
+            </option>
+          ))}
+        </SelectInput>
+      </FilterBar>
+
+      {filterGroupeId && (
+        <div className="mb-4 flex justify-end">
+          <Button onClick={handlePrint} disabled={students.length === 0}>
+            <Printer className="w-4 h-4" /> Imprimer
+          </Button>
+        </div>
+      )}
+
+      {filterGroupeId && (
+        <div ref={printRef} className="print-area">
+          <h1 className="text-center text-xl font-bold mb-2">Liste des étudiants</h1>
+          <div className="text-center text-sm mb-4">
+            {groupes.find((g) => String(g.id) === filterGroupeId)?.nom}
+          </div>
+
+          <DataTable>
+            <THead>
+              <TR>
+                <TH>#</TH>
+                <TH>Matricule</TH>
+                <TH>Nom</TH>
+                <TH>Prénom</TH>
+                <TH>Signature</TH>
+              </TR>
+            </THead>
+            <tbody>
+              {loadingInscriptions ? (
+                <TR><TD colSpan={5} className="py-8 text-center text-muted-foreground">Chargement…</TD></TR>
+              ) : students.length === 0 ? (
+                <TR><TD colSpan={5} className="py-8 text-center text-muted-foreground">Aucun étudiant dans ce groupe</TD></TR>
+              ) : (
+                students.map((student) => (
+                  <TR key={student.id}>
+                    <TD className="text-muted-foreground">{student.index}</TD>
+                    <TD className="font-mono text-xs">{student.matricule}</TD>
+                    <TD className="font-medium">{student.nom}</TD>
+                    <TD className="font-medium">{student.prenom}</TD>
+                    <TD className="h-16"></TD>
+                  </TR>
+                ))
+              )}
+            </tbody>
+          </DataTable>
+        </div>
+      )}
     </>
   );
 }
