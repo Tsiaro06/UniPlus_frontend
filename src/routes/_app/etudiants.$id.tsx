@@ -5,9 +5,10 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
 import { DataTable, THead, TH, TR, TD, Avatar } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/badge-status";
-import { etudiants, inscriptions, notes, resultatsSemestre, stages } from "@/lib/mock-data";
+import { inscriptions, notes, resultatsSemestre, stages } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { api } from "@/lib/api/client";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -220,20 +221,75 @@ const tabs = ["Inscriptions", "Notes", "Résultats", "Présences", "Stage"];
 
 function EtudiantDetailPage() {
   const { id } = Route.useParams();
-  const found = etudiants.find((x) => String(x.id) === id) ?? etudiants[0];
-  const [etudiant, setEtudiant] = useState<Etudiant>(found as Etudiant);
+  const [etudiant, setEtudiant] = useState<Etudiant | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState("Inscriptions");
   const [formOpen, setFormOpen] = useState(false);
 
-  const myNotes  = notes.filter((n) => n.matricule === etudiant.matricule);
-  const myStages = stages.filter((s) => s.matricule === etudiant.matricule);
-  const myRes    = resultatsSemestre.filter((r) => r.matricule === etudiant.matricule);
+  useEffect(() => {
+    const fetchEtudiant = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await api<{ success: boolean; data: Etudiant }>(`/etudiants/${id}`);
+        if (response.success && response.data) {
+          setEtudiant(response.data);
+        } else {
+          setError("Impossible de charger les données de l'étudiant");
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching student:", err);
+        setError("Erreur lors du chargement des données de l'étudiant");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleSave = (data: EditData) => {
-    setEtudiant((prev) => ({ ...prev, ...data }));
-    toast.success("Profil mis à jour avec succès !");
-    setFormOpen(false);
+    if (id) {
+      fetchEtudiant();
+    }
+  }, [id]);
+
+  const myNotes  = etudiant ? notes.filter((n) => n.matricule === etudiant.matricule) : [];
+  const myStages = etudiant ? stages.filter((s) => s.matricule === etudiant.matricule) : [];
+  const myRes    = etudiant ? resultatsSemestre.filter((r) => r.matricule === etudiant.matricule) : [];
+
+  const handleSave = async (data: EditData) => {
+    if (!etudiant) return;
+    try {
+      const response = await api<{ success: boolean; data: Etudiant }>(`/etudiants/${etudiant.id}`, {
+        method: "PUT",
+        body: data,
+      });
+      if (response.success && response.data) {
+        setEtudiant(response.data);
+        toast.success("Profil mis à jour avec succès !");
+        setFormOpen(false);
+      } else {
+        toast.error("Erreur lors de la mise à jour");
+      }
+    } catch (err) {
+      console.error("[v0] Error saving student:", err);
+      toast.error("Erreur lors de la mise à jour");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-[400px]">
+        <div className="text-muted-foreground">Chargement des données...</div>
+      </div>
+    );
+  }
+
+  if (error || !etudiant) {
+    return (
+      <div className="flex justify-center items-center h-[400px]">
+        <div className="text-danger">{error || "Étudiant non trouvé"}</div>
+      </div>
+    );
+  }
 
   return (
     <>

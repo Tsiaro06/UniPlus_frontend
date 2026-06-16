@@ -72,7 +72,7 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     sections.forEach((s) => {
-      initial[s.title] = s.title === "Principal";
+      initial[s.title] = true;
     });
     return initial;
   });
@@ -110,16 +110,16 @@ export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle:
               )}
             </div>
 
-            <div className={cn("flex flex-col gap-0.5 mt-1 px-1 overflow-hidden transition-all", !openSections[section.title] && "hidden")}>
+            <div className={cn("flex flex-col gap-0.5 mt-1 overflow-hidden transition-all", !openSections[section.title] && "hidden")}>
               {section.items.map((it) => (
                 <Link
                   key={it.to}
                   to={it.to}
-                  className="group relative flex items-center gap-3 hover:bg-slate-50 px-3 py-2 rounded-lg text-slate-700 text-sm"
+                  className="group relative flex items-center gap-3 hover:bg-slate-100 px-6 py-2 rounded-md text-slate-600 text-xs font-medium"
                   activeOptions={{ exact: false }}
                   title={collapsed ? it.label : undefined}
                 >
-                  <it.icon className="w-[18px] h-[18px] text-slate-500 shrink-0" />
+                  <it.icon className="w-4 h-4 text-slate-400 shrink-0" />
                   {!collapsed && <span className="truncate">{it.label}</span>}
                 </Link>
               ))}

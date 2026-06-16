@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { PencilLine, Ban } from "lucide-react";
-import { useState, useEffect } from "react";
+import { PencilLine, Ban, Printer } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/stat-card";
@@ -17,9 +17,11 @@ export const Route = createFileRoute("/_app/notes/")(
 );
 
 function NotesIndexPage() {
+  const tableRef = useRef<HTMLTableElement>(null);
   const [selectedGroupeId, setSelectedGroupeId] = useState("");
   const [selectedCalendarSemestreId, setSelectedCalendarSemestreId] = useState("");
   const [selectedInscriptionId, setSelectedInscriptionId] = useState("");
+  const [selectedMatiereId, setSelectedMatiereId] = useState("");
 
   // Fetch groupes
   const { data: groupes = [] } = useQuery({
@@ -113,19 +115,68 @@ function NotesIndexPage() {
   const displayNotes = selectedInscriptionId ? notes : allGroupNotes;
   const loading = selectedInscriptionId ? notesLoading : allNotesLoading;
 
+  // Extract unique matieres from current notes
+  const matieres = Array.from(
+    new Map(
+      displayNotes.map((n: any) => [
+        n.matiereId,
+        { id: n.matiereId, code: n.matiere?.code, intitule: n.matiere?.intitule }
+      ])
+    ).values()
+  ).sort((a: any, b: any) => (a.intitule || "").localeCompare(b.intitule || ""));
+
+  // Filter notes by selected matière
+  const filteredNotes = selectedMatiereId
+    ? displayNotes.filter((n: any) => String(n.matiereId) === selectedMatiereId)
+    : displayNotes;
+
+  // Print function
+  const handlePrint = () => {
+    if (!tableRef.current) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Impression - Notes</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; font-weight: bold; }
+          tr:nth-child(even) { background-color: #f9f9f9; }
+          h2 { text-align: center; margin-bottom: 10px; }
+        </style>
+      </head>
+      <body>
+        <h2>Liste des Notes</h2>
+        ${tableRef.current.outerHTML}
+        <script>
+          window.print();
+          window.close();
+        </script>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   return (
     <div>
       <PageHeader
         title="Notes"
-        subtitle={`${displayNotes.length} notes enregistrées`}
-        actions={<Link to="/notes/saisie"><Button><PencilLine className="w-4 h-4" /> Saisie de notes</Button></Link>}
+        subtitle={`${filteredNotes.length} notes enregistrées`}
+        actions={<div className="flex gap-2"><Link to="/notes/saisie"><Button><PencilLine className="w-4 h-4" /> Saisie de notes</Button></Link><Button variant="secondary" onClick={handlePrint} disabled={filteredNotes.length === 0}><Printer className="w-4 h-4" /> Imprimer</Button></div>}
       />
       <FilterBar>
-        <SelectInput aria-label="Groupe" value={selectedGroupeId} onChange={(v: string) => { setSelectedGroupeId(v); setSelectedInscriptionId(""); }}>
+        <SelectInput aria-label="Groupe" value={selectedGroupeId} onChange={(v: string) => { setSelectedGroupeId(v); setSelectedInscriptionId(""); setSelectedMatiereId(""); }}>
           <option value="">Sélectionner un groupe</option>
           {(groupes as any[]).map((g) => <option key={g.id} value={g.id}>{g.nom}</option>)}
         </SelectInput>
-        <SelectInput aria-label="Semestre" value={selectedCalendarSemestreId} onChange={setSelectedCalendarSemestreId}>
+        <SelectInput aria-label="Semestre" value={selectedCalendarSemestreId} onChange={(v: string) => { setSelectedCalendarSemestreId(v); setSelectedMatiereId(""); }}>
           <option value="">Sélectionner un semestre</option>
           {calendarSemestres.map((s) => (
             <option key={s.id} value={s.id}>
@@ -133,7 +184,7 @@ function NotesIndexPage() {
             </option>
           ))}
         </SelectInput>
-        <SelectInput aria-label="Inscription" value={selectedInscriptionId} onChange={setSelectedInscriptionId}>
+        <SelectInput aria-label="Inscription" value={selectedInscriptionId} onChange={(v: string) => { setSelectedInscriptionId(v); setSelectedMatiereId(""); }}>
           <option value="">Toutes les inscriptions</option>
           {(inscriptions as any[]).map((ins) => (
             <option key={ins.id} value={ins.id}>
@@ -141,8 +192,17 @@ function NotesIndexPage() {
             </option>
           ))}
         </SelectInput>
+        <SelectInput aria-label="Matière" value={selectedMatiereId} onChange={setSelectedMatiereId}>
+          <option value="">Toutes les matières</option>
+          {matieres.map((m: any) => (
+            <option key={m.id} value={m.id}>
+              {m.intitule ?? m.code ?? `Matière #${m.id}`}
+            </option>
+          ))}
+        </SelectInput>
       </FilterBar>
       <DataTable>
+        <table ref={tableRef} style={{ width: "100%" }}>
         <THead><TR><TH>#</TH><TH>Étudiant</TH><TH>Matière</TH><TH>Semestre</TH><TH>Normale</TH><TH>Rattrapage</TH><TH>Finale</TH><TH>Abs. inj.</TH></TR></THead>
         <tbody>
           {loading ? (
@@ -153,7 +213,9 @@ function NotesIndexPage() {
                !selectedCalendarSemestreId ? "Sélectionnez un semestre" :
                "Aucune note trouvée"}
             </TD></TR>
-          ) : displayNotes.map((n: any, i: number) => {
+          ) : filteredNotes.length === 0 ? (
+            <TR><TD colSpan={8} className="py-8 text-muted-foreground text-center">Aucune note trouvée pour cette matière</TD></TR>
+          ) : filteredNotes.map((n: any, i: number) => {
             const noteNormale = n.noteNormale != null ? Number(n.noteNormale) : null;
             const noteRattrapage = n.noteRattrapage != null ? Number(n.noteRattrapage) : null;
             const finale = n.absenceInjustifiee ? 0 : (n.noteFinal != null ? Number(n.noteFinal) : (noteRattrapage ?? noteNormale ?? 0));
@@ -171,6 +233,7 @@ function NotesIndexPage() {
             );
           })}
         </tbody>
+        </table>
       </DataTable>
     </div>
   );

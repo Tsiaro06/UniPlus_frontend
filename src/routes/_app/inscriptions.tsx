@@ -133,6 +133,10 @@ function DetailModal({ isOpen, inscription, onClose }: { isOpen: boolean; inscri
               <div><strong>Date :</strong> {getDateInscription(inscription)}</div>
               <div><strong>Statut :</strong> <StatusBadge status={inscription.statut} /></div>
               <div><strong>Paiement :</strong> <StatusBadge status={getPaye(inscription) ? "paye" : "impaye"} /></div>
+              <div><strong>Montant :</strong> {(inscription as any)?.montantPaye ? `${(inscription as any).montantPaye} Ar` : "-"}</div>
+              <div><strong>Bordereau :</strong> {(inscription as any)?.numeroBordereau ? <span className="font-mono">{(inscription as any).numeroBordereau}</span> : "-"}</div>
+              <div><strong>Banque :</strong> {(inscription as any)?.nomBanque || "-"}</div>
+              <div><strong>Date paiement :</strong> {(inscription as any)?.datePaiement ? new Date((inscription as any).datePaiement).toLocaleDateString("fr-FR") : "-"}</div>
             </div>
 
             {inscription.estRedoublant && (
@@ -543,7 +547,7 @@ function InscriptionsPage() {
         <DataTable>
           <THead>
             <TR>
-              <TH>#</TH><TH>Étudiant</TH><TH>Groupe</TH><TH>Filière</TH><TH>Niveau</TH><TH>Statut</TH><TH>Redoublant</TH><TH>Date</TH><TH>Paiement</TH><TH className="text-right">Actions</TH>
+              <TH>#</TH><TH>Étudiant</TH><TH>Groupe</TH><TH>Filière</TH><TH>Niveau</TH><TH>Statut</TH><TH>Redoublant</TH><TH>Date</TH><TH>Montant</TH><TH>Bordereau</TH><TH>Banque</TH><TH>Paiement</TH><TH className="text-right">Actions</TH>
             </TR>
           </THead>
           <tbody>
@@ -565,6 +569,9 @@ function InscriptionsPage() {
                 <TD><StatusBadge status={i.statut} /></TD>
                 <TD>{i.estRedoublant && <RefreshCw className="w-4 h-4 text-amber-600" />}</TD>
                 <TD className="text-muted-foreground">{getDateInscription(i)}</TD>
+                <TD className="font-mono font-semibold">{(i as any)?.montantPaye ? `${(i as any).montantPaye} Ar` : "-"}</TD>
+                <TD className="font-mono text-sm">{(i as any)?.numeroBordereau || "-"}</TD>
+                <TD className="text-muted-foreground text-sm">{(i as any)?.nomBanque || "-"}</TD>
                 <TD><StatusBadge status={getPaye(i) ? "paye" : "impaye"} /></TD>
                 <TD>
                   <div className="flex justify-end gap-1">
