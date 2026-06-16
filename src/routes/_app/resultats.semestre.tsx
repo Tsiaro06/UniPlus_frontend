@@ -10,7 +10,7 @@ import { useApiList } from "@/lib/api/use-api-list";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { inscriptionsApi, groupesApi, anneesApi } from "@/lib/api/endpoints";
+import { inscriptionsApi, groupesApi, anneesApi, reportsApi } from "@/lib/api/endpoints";
 import type { AnneeScolaireSemestre } from "@/lib/lmd";
 
 interface ResultatSemestre {
@@ -20,6 +20,19 @@ interface ResultatSemestre {
   groupe: string;
   semestre: string;
   moyenne: number;
+  decision: string;
+  inscriptionId: number | string;
+}
+
+interface BulletinData {
+  etudiant: {
+    matricule: string;
+    nom: string;
+    prenom: string;
+  };
+  filiere: string;
+  groupe: string;
+  moyenneGenerale: number;
   decision: string;
 }
 
@@ -72,20 +85,50 @@ function ResultatsSemestrePage() {
     }
   }, [calendarSemestres, selectedCalendarSemestreId]);
 
-  const rows: ResultatSemestre[] = (inscriptions as any[])
-    .filter((ins) => {
-      if (selectedGroupeId && String(ins.groupeId ?? ins.groupe?.id) !== selectedGroupeId) return false;
-      return true;
-    })
-    .map((ins) => ({
-      id: ins.id,
-      matricule: ins.etudiant?.matricule ?? "",
-      etudiant: [ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" "),
-      groupe: ins.groupe?.nom ?? String(ins.groupe ?? ""),
-      semestre: calendarSemestres.find((s) => String(s.id) === selectedCalendarSemestreId)?.semestre?.code ?? "—",
-      moyenne: ins.moyenneSemestre ?? 0,
-      decision: ins.statusSemestre ?? ins.statut ?? "en_attente",
-    }));
+  // Fetch bulletin data for all inscriptions
+  const filteredInscriptions = (inscriptions as any[]).filter((ins) => {
+    if (selectedGroupeId && String(ins.groupeId ?? ins.groupe?.id) !== selectedGroupeId) return false;
+    return true;
+  });
+
+  const { data: bulletins = {} } = useQuery({
+    queryKey: ["bulletins-semestre", selectedCalendarSemestreId, filteredInscriptions.map(i => i.id).join(",")],
+    queryFn: async () => {
+      if (!selectedCalendarSemestreId || filteredInscriptions.length === 0) return {};
+      
+      const bulletinData: Record<string, BulletinData> = {};
+      
+      for (const ins of filteredInscriptions) {
+        try {
+          const result = await reportsApi.bulletinSemestre(ins.id, selectedCalendarSemestreId) as any;
+          bulletinData[ins.id] = result?.data ?? result;
+        } catch (error) {
+          console.error(`[v0] Error fetching bulletin for inscription ${ins.id}:`, error);
+        }
+      }
+      
+      return bulletinData;
+    },
+    enabled: !!selectedCalendarSemestreId && filteredInscriptions.length > 0,
+  });
+
+  const rows: ResultatSemestre[] = filteredInscriptions
+    .map((ins) => {
+      const bulletin = bulletins[ins.id] as BulletinData | undefined;
+      
+      return {
+        id: ins.id,
+        inscriptionId: ins.id,
+        matricule: bulletin?.etudiant?.matricule ?? ins.etudiant?.matricule ?? "",
+        etudiant: bulletin 
+          ? [bulletin.etudiant?.prenom, bulletin.etudiant?.nom].filter(Boolean).join(" ")
+          : [ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" "),
+        groupe: ins.groupe?.nom ?? String(ins.groupe ?? ""),
+        semestre: calendarSemestres.find((s) => String(s.id) === selectedCalendarSemestreId)?.semestre?.code ?? "—",
+        moyenne: bulletin?.moyenneGenerale ?? ins.moyenneSemestre ?? 0,
+        decision: bulletin?.decision ?? ins.statusSemestre ?? ins.statut ?? "en_attente",
+      };
+    });
 
   const calculerUn = useMutation({
     mutationFn: (inscriptionId: number | string) => {
