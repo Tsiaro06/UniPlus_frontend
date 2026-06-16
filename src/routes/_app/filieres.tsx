@@ -135,7 +135,7 @@ function FormModal({
 
   if (!isOpen) return null;
 
-  const canSubmit = form.code.trim() !== "" && form.nom.trim() !== "" && form.departementId !== "" && !isSaving;
+  const canSubmit = form.code.trim() !== "" && form.nom.trim() !== "" && form.departementId !== "" && form.typeDiplome !== "" && !isSaving;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -372,8 +372,8 @@ function FilieresPage() {
 
   const add = useMutation({
     mutationFn: (payload: FormData) => {
-      const { nbGroupes, ...data } = payload;
       // POST expects: departementId, nom, code, typeDiplome, dureeAnnees
+      const { nbGroupes, ...data } = payload;
       return filieresApi.create(data);
     },
     onSuccess: () => {
@@ -382,13 +382,16 @@ function FilieresPage() {
       refetch();
       setFormOpen(false);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur lors de l'ajout"),
+    onError: (e: any) => {
+      const errorMsg = e?.body?.message || e?.message || "Erreur lors de l'ajout";
+      toast.error(errorMsg);
+    },
   });
 
   const edit = useMutation({
     mutationFn: ({ id, ...payload }: FormData & { id: Filiere["id"] }) => {
+      // PUT only accepts: nom, typeDiplome, dureeAnnees (no code, no departementId changes)
       const { code, departementId, nbGroupes, ...data } = payload;
-      // PUT only accepts: nom, description, typeDiplome, dureeAnnees
       return filieresApi.update(id, data);
     },
     onSuccess: () => {
@@ -397,7 +400,10 @@ function FilieresPage() {
       refetch();
       setFormOpen(false);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Erreur lors de la modification"),
+    onError: (e: any) => {
+      const errorMsg = e?.body?.message || e?.message || "Erreur lors de la modification";
+      toast.error(errorMsg);
+    },
   });
 
   const del = useMutation({
@@ -408,7 +414,10 @@ function FilieresPage() {
       refetch();
       setDeleteTarget(null);
     },
-    onError: (e: any) => toast.error(e?.message ?? "Suppression impossible"),
+    onError: (e: any) => {
+      const errorMsg = e?.body?.message || e?.message || "Suppression impossible";
+      toast.error(errorMsg);
+    },
   });
 
   const openAdd = () => {
