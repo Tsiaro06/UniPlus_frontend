@@ -14,14 +14,23 @@ import { inscriptionsApi, groupesApi, anneesApi, reportsApi } from "@/lib/api/en
 
 interface ResultatAnnuel {
   id: number | string;
-  matricule: string;
-  etudiant: string;
-  groupe: string;
-  moyenneTheorique: number;
-  moyennePratique: number;
-  moyenneFinal: number;
-  decision: string;
   inscriptionId: number | string;
+  matricule: string;
+  nom: string;
+  prenom: string;
+  groupe: string;
+  theoriqueAverage: number;
+  practicalAverage: number | null;
+  finalAverage: number;
+  decision: string;
+  semesterResults: SemesterResult[];
+}
+
+interface SemesterResult {
+  semestre: string;
+  moyenneTheorique: number;
+  decision: string;
+  statutTheorique: string | null;
 }
 
 interface BulletinAnnuelData {
@@ -38,6 +47,7 @@ interface BulletinAnnuelData {
   practicalAverage: number | null;
   finalAverage: number;
   decision: string;
+  semesterResults: SemesterResult[];
 }
 
 export const Route = createFileRoute("/_app/resultats/annuel")({
@@ -107,14 +117,14 @@ function ResultatsAnnuelPage() {
         id: ins.id,
         inscriptionId: ins.id,
         matricule: bulletin?.etudiant?.matricule ?? ins.etudiant?.matricule ?? "",
-        etudiant: bulletin 
-          ? [bulletin.etudiant?.prenom, bulletin.etudiant?.nom].filter(Boolean).join(" ")
-          : [ins.etudiant?.prenom, ins.etudiant?.nom].filter(Boolean).join(" "),
+        nom: bulletin?.etudiant?.nom ?? ins.etudiant?.nom ?? "",
+        prenom: bulletin?.etudiant?.prenom ?? ins.etudiant?.prenom ?? "",
         groupe: bulletin?.groupe ?? ins.groupe?.nom ?? "",
-        moyenneTheorique: bulletin?.theoriqueAverage ?? ins.moyenneTheorique ?? 0,
-        moyennePratique: bulletin?.practicalAverage ?? ins.moyennePratique ?? 0,
-        moyenneFinal: bulletin?.finalAverage ?? ins.moyenneFinale ?? 0,
+        theoriqueAverage: bulletin?.theoriqueAverage ?? 0,
+        practicalAverage: bulletin?.practicalAverage ?? null,
+        finalAverage: bulletin?.finalAverage ?? 0,
         decision: bulletin?.decision ?? ins.statusAnnee ?? ins.statut ?? "en_attente",
+        semesterResults: bulletin?.semesterResults ?? [],
       };
     });
 
@@ -247,10 +257,13 @@ function ResultatsAnnuelPage() {
             <TR>
               <TH>#</TH>
               <TH>Matricule</TH>
-              <TH>Étudiant</TH>
+              <TH>Nom</TH>
+              <TH>Prénom</TH>
               <TH>Groupe</TH>
+              {rows.length > 0 && rows[0].semesterResults?.length > 0 && rows[0].semesterResults.map((sr) => (
+                <TH key={sr.semestre}>{sr.semestre}</TH>
+              ))}
               <TH>Moy. théorique</TH>
-              <TH>Moy. pratique</TH>
               <TH>Moy. finale</TH>
               <TH>Décision</TH>
               <TH className="text-right">Actions</TH>
@@ -261,12 +274,17 @@ function ResultatsAnnuelPage() {
             <TR key={r.id}>
               <TD className="text-muted-foreground">{r.id}</TD>
               <TD className="font-mono text-xs">{r.matricule}</TD>
-              <TD className="font-medium">{r.etudiant}</TD>
+              <TD className="font-medium">{r.nom}</TD>
+              <TD className="font-medium">{r.prenom}</TD>
               <TD>{r.groupe || "—"}</TD>
-              <TD>{r.moyenneTheorique ? r.moyenneTheorique.toFixed(2) : "—"}</TD>
-              <TD>{r.moyennePratique ? r.moyennePratique.toFixed(2) : "—"}</TD>
-              <TD className={r.moyenneFinal >= 10 ? "font-bold text-emerald-600" : "font-bold text-danger"}>
-                {r.moyenneFinal ? `${r.moyenneFinal.toFixed(2)}/20` : "—"}
+              {r.semesterResults?.map((sr) => (
+                <TD key={sr.semestre} className="text-center">
+                  {sr.moyenneTheorique ? sr.moyenneTheorique.toFixed(2) : "—"}
+                </TD>
+              ))}
+              <TD>{r.theoriqueAverage ? r.theoriqueAverage.toFixed(2) : "—"}</TD>
+              <TD className={r.finalAverage >= 10 ? "font-bold text-emerald-600" : "font-bold text-danger"}>
+                {r.finalAverage ? `${r.finalAverage.toFixed(2)}/20` : "—"}
               </TD>
               <TD><StatusBadge status={r.decision} /></TD>
               <TD>
